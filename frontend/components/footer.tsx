@@ -4,10 +4,13 @@ import { useState } from "react";
 import Link from "next/link";
 import { GithubLogo } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
-
-const inputClass =
-  "w-full rounded-sm border border-input bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring";
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupInput,
+  InputGroupTextarea,
+  InputGroupText,
+} from "@/components/ui/input-group";
 
 export default function Footer() {
   const [form, setForm] = useState({ name: "", email: "", message: "" });
@@ -30,30 +33,42 @@ export default function Footer() {
             </p>
           ) : (
             <form onSubmit={handleSubmit} className="flex flex-col gap-3">
-              <input
-                type="text"
-                placeholder="Name"
-                required
-                value={form.name}
-                onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-                className={inputClass}
-              />
-              <input
-                type="email"
-                placeholder="Email"
-                required
-                value={form.email}
-                onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
-                className={inputClass}
-              />
-              <textarea
-                placeholder="Message"
-                required
-                rows={4}
-                value={form.message}
-                onChange={(e) => setForm((f) => ({ ...f, message: e.target.value }))}
-                className={cn(inputClass, "resize-none")}
-              />
+              <InputGroup>
+                <InputGroupAddon align="block-start">
+                  <InputGroupText>Name</InputGroupText>
+                </InputGroupAddon>
+                <InputGroupInput
+                  type="text"
+                  required
+                  value={form.name}
+                  onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+                />
+              </InputGroup>
+
+              <InputGroup>
+                <InputGroupAddon align="block-start">
+                  <InputGroupText>Email</InputGroupText>
+                </InputGroupAddon>
+                <InputGroupInput
+                  type="email"
+                  required
+                  value={form.email}
+                  onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
+                />
+              </InputGroup>
+
+              <InputGroup>
+                <InputGroupAddon align="block-start">
+                  <InputGroupText>Message</InputGroupText>
+                </InputGroupAddon>
+                <InputGroupTextarea
+                  required
+                  rows={4}
+                  value={form.message}
+                  onChange={(e) => setForm((f) => ({ ...f, message: e.target.value }))}
+                />
+              </InputGroup>
+
               <Button type="submit" className="self-start">
                 Send
               </Button>
