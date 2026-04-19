@@ -55,15 +55,16 @@ function ProjectCarousel({ images }: { images: ProjectImage[] }) {
   return (
     <div className="flex flex-col gap-3">
       <Carousel setApi={setApi} opts={{ loop: true }}>
-        <div className="relative aspect-video w-full overflow-hidden bg-muted">
-          <CarouselContent className="-ml-0 h-full">
+        <div className="relative w-full overflow-hidden rounded-md bg-muted">
+          <CarouselContent className="-ml-0">
             {images.map((img) => (
               <CarouselItem key={img.id} className="pl-0">
-                <div className="relative h-full w-full">
+                <div className="relative aspect-video w-full">
                   <Image
                     src={img.id}
                     alt={img.altText}
                     fill
+                    unoptimized
                     className="object-cover"
                   />
                 </div>
@@ -112,7 +113,16 @@ export default function ProjectCard({
     <div className="grid grid-cols-1 items-center gap-8 md:grid-cols-2">
       {/* Carousel is always first in DOM so it appears on top on mobile */}
       <div className={imagePos === "last" ? "md:order-last" : ""}>
-        <ProjectCarousel images={images} />
+        {images.length > 0 ? (
+          <ProjectCarousel images={images} />
+        ) : (
+          <div className="flex aspect-video w-full items-center justify-center rounded-md border border-dashed border-border bg-muted/40 px-6 text-center">
+            <p className="text-xs text-muted-foreground">
+              Screenshots are unavailable for this project. It is proprietary
+              commercial software and the assets are not mine to share.
+            </p>
+          </div>
+        )}
       </div>
 
       <div className={imagePos === "last" ? "md:order-first" : ""}>
