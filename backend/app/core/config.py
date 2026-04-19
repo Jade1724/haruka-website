@@ -15,5 +15,7 @@ class Settings(BaseSettings):
     smtp_password: str
     contact_recipient: str
 
+    allowed_origins: str = "http://localhost:3000"
+
 
 settings = Settings()

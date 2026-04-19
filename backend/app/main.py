@@ -18,6 +18,7 @@ logging.basicConfig(
 
 from api.contact import router as contact_router
 from api.journal import router as journal_router
+from core.config import settings
 
 
 @asynccontextmanager
@@ -32,7 +33,7 @@ app = FastAPI(lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=settings.allowed_origins.split(","),
     allow_methods=["GET", "POST"],
     allow_headers=["*"],
 )
