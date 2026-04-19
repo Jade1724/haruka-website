@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils";
 import Navbar from "@/components/navbar";
 import Footer from "@/components/footer";
 import QueryProvider from "@/components/query-provider";
+import { ThemeProvider } from "@/components/theme-provider";
 
 const jetbrainsMono = JetBrains_Mono({subsets:['latin'],variable:'--font-mono'});
 
@@ -31,14 +32,24 @@ export default function RootLayout({
   return (
     <html
       lang="en"
+      suppressHydrationWarning
       className={cn("h-full", "antialiased", geistSans.variable, geistMono.variable, "font-mono", jetbrainsMono.variable)}
     >
+      <head>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){var s=localStorage.getItem('theme');document.documentElement.classList.toggle('dark',s?s==='dark':true);})();`,
+          }}
+        />
+      </head>
       <body className="min-h-full flex flex-col">
-        <QueryProvider>
-          <Navbar />
-          <main className="flex-1">{children}</main>
-          <Footer />
-        </QueryProvider>
+        <ThemeProvider>
+          <QueryProvider>
+            <Navbar />
+            <main className="flex-1">{children}</main>
+            <Footer />
+          </QueryProvider>
+        </ThemeProvider>
       </body>
     </html>
   );
