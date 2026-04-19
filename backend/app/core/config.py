@@ -1,0 +1,13 @@
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class Settings(BaseSettings):
+    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
+
+    github_token: str
+    github_repo: str = "Jade1724/obsidian"
+    journals_base_path: str = "Dev/Journals"
+    cache_ttl_seconds: int = 600
+
+
+settings = Settings()
