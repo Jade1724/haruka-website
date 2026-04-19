@@ -152,10 +152,10 @@ class JournalService:
             )
             raise
 
-        year, month, day, _ = target_parsed
+        year, month, day, slug = target_parsed
         detail = JournalDetail(
             id=journal_id,
-            title=_extract_title(content),
+            title=_extract_title(content) or _slug_to_title(slug),
             published_on=date(year, month, day),
             updated_on=updated_on,
             content=content,
