@@ -1,0 +1,97 @@
+{
+  "projects": [
+    {
+      "title": "Haruka Website",
+      "imagePos": "first",
+      "images": [
+        { "id": "/next.svg", "altText": "Haruka website homepage" }
+      ],
+      "links": [
+        { "type": "github", "url": "https://github.com/Jade1724/haruka-website" }
+      ],
+      "description": "This portfolio website built with Next.js, Tailwind CSS, and FastAPI, hosted on Vercel. Features a project showcase, career timeline, and a dev journal scraped from my private Obsidian repository."
+    },
+    {
+      "title": "Fruit Maturity Clearance",
+      "imagePos": "last",
+      "images": [
+        { "id": "/next.svg", "altText": "Fruit maturity clearance dashboard" }
+      ],
+      "links": [],
+      "description": "Maturity clearance system used by real fruit growers, packhouses, and labs to digitally track fruit quality and maturity. Built with Next.js, .NET, and SQL Server on Azure. Handled operations, monitoring, and incident resolutions."
+    },
+    {
+      "title": "B2B Sales Recommendation System",
+      "imagePos": "first",
+      "images": [
+        { "id": "/next.svg", "altText": "B2B sales recommendation dashboard" }
+      ],
+      "links": [],
+      "description": "AI sales recommendation system using RAG to suggest best sales actions based on client public data, in-house revenue data, and third-party sources. Built with Next.js, FastAPI, Snowflake, and Azure OpenAI."
+    },
+    {
+      "title": "Spectral Detect",
+      "imagePos": "last",
+      "images": [
+        { "id": "/next.svg", "altText": "Spectral Detect web app interface" }
+      ],
+      "links": [],
+      "description": "Invasive plant detection and location tracker built as a University of Canterbury Master's project. Helps the Department of Conservation automatically detect euphorbia paralias from UAV imagery. Built with Vue.js, Spring Boot, and MariaDB on AWS."
+    },
+    {
+      "title": "Apple Thinning VR",
+      "imagePos": "first",
+      "images": [
+        { "id": "/next.svg", "altText": "Apple thinning VR game screenshot" }
+      ],
+      "links": [
+        { "type": "github", "url": "https://github.com/uc-vision/apple-thinning" }
+      ],
+      "description": "Agriculture simulation VR game for training farmers in apple fruitlet thinning. Built with the Godot game engine targeting Oculus Quest 2, as part of the University of Canterbury's computer vision lab research."
+    }
+  ],
+  "work": [
+    {
+      "title": "AI Engineer",
+      "startYear": 2023,
+      "endYear": null,
+      "organisation": {
+        "name": "Spark New Zealand",
+        "logo": { "id": "/next.svg", "altText": "Spark New Zealand logo" }
+      },
+      "description": "Developed and maintained applications and systems integrated with AI. Worked on an AI-decisioning marketing system and a B2B sales recommendation system."
+    },
+    {
+      "title": "Software Developer Intern",
+      "startYear": 2022,
+      "endYear": 2023,
+      "organisation": {
+        "name": "Umajin",
+        "logo": { "id": "/next.svg", "altText": "Umajin logo" }
+      },
+      "description": "Worked on two projects: a React dashboard app for an automotive oil company client, and a WebXR application using THREE.js with Jest testing."
+    }
+  ],
+  "education": [
+    {
+      "title": "Professional Master of Computer Science",
+      "startYear": 2022,
+      "endYear": 2023,
+      "organisation": {
+        "name": "University of Canterbury",
+        "logo": { "id": "/next.svg", "altText": "University of Canterbury logo" }
+      },
+      "description": "Project-based master's degree building a full-stack web application to automate invasive plant detection. Worked as a research assistant and built the Apple Thinning agricultural VR training game."
+    },
+    {
+      "title": "Bachelor of Science — Computer Science & Physics",
+      "startYear": 2018,
+      "endYear": 2022,
+      "organisation": {
+        "name": "University of Canterbury",
+        "logo": { "id": "/next.svg", "altText": "University of Canterbury logo" }
+      },
+      "description": "Double major in Computer Science and Physics."
+    }
+  ]
+}
