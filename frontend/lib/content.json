@@ -22,9 +22,17 @@
       "description": "Maturity clearance system used by real fruit growers, packhouses, and labs to digitally track fruit quality and maturity. Built with Next.js, .NET, and SQL Server on Azure. Handled operations, monitoring, and incident resolutions."
     },
     {
-      "title": "B2B Sales Recommendation System",
+      "title": "Azure Auto Resource Optimiser",
       "projectType": "Commercial",
       "imagePos": "first",
+      "images": [],
+      "links": [],
+      "description": "Automated Azure cost optimisation system using Python Prefect flows to scan resources via the Graph API, notify owners of scheduled deletions, and run daily cleanup of stale resources. Resource owners can defer deletions through a Streamlit app hosted in Snowflake."
+    },
+    {
+      "title": "B2B Sales Recommendation System",
+      "projectType": "Commercial",
+      "imagePos": "last",
       "images": [],
       "links": [],
       "description": "AI sales recommendation system using RAG to suggest best sales actions based on client public data, in-house revenue data, and third-party sources. Built with Next.js, FastAPI, Snowflake, and Azure OpenAI."
@@ -32,7 +40,7 @@
     {
       "title": "Spectral Detect",
       "projectType": "Research",
-      "imagePos": "last",
+      "imagePos": "first",
       "images": [
         { "id": "/projects/spectral-detect/file-upload.gif", "altText": "File upload interface" },
         { "id": "/projects/spectral-detect/map.gif", "altText": "Detection map view" },
@@ -44,7 +52,7 @@
     {
       "title": "Apple Thinning VR",
       "projectType": "Research",
-      "imagePos": "first",
+      "imagePos": "last",
       "images": [
         { "id": "/projects/apple-thinning/tutorial.jpg", "altText": "Tutorial screen" },
         { "id": "/projects/apple-thinning/time-attack.jpg", "altText": "Time attack mode" },
