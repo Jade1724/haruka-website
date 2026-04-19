@@ -34,7 +34,8 @@ uv run uvicorn app.main:app --reload             # start dev server
 
 ### Backend (`backend/`)
 - **Framework**: FastAPI + Uvicorn, Python 3.13, managed with `uv`
-- **Planned structure**: `app/api/` routes, `app/services/` business logic, `app/dao/` data access, `app/core/` config
+- **Structure**: `app/api/` routes, `app/services/` business logic, `app/dao/` data access, `app/core/` config
+- **Adapters**: `app/core/adapters/` holds thin wrappers around external services (e.g. SMTP, third-party APIs). Each module adapts one external dependency; services import from here rather than calling external SDKs directly
 - **Key feature**: scrapes markdown from a private Obsidian GitHub repo (requires `GITHUB_TOKEN`) and serves it as a REST API for the dev journal
 
 ### Environment Variables
