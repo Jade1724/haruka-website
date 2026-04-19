@@ -15,11 +15,29 @@ import {
 export default function Footer() {
   const [form, setForm] = useState({ name: "", email: "", message: "" });
   const [submitted, setSubmitted] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    // TODO: wire up to backend contact endpoint
-    setSubmitted(true);
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8000"}/contact`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(form),
+        }
+      );
+      if (!res.ok) throw new Error(`Server error ${res.status}`);
+      setSubmitted(true);
+    } catch {
+      setError("Something went wrong. Please try again.");
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (
@@ -69,8 +87,12 @@ export default function Footer() {
                 />
               </InputGroup>
 
-              <Button type="submit" className="self-start">
-                Send
+              {error && (
+                <p className="text-xs text-destructive">{error}</p>
+              )}
+
+              <Button type="submit" disabled={loading} className="self-start">
+                {loading ? "Sending…" : "Send"}
               </Button>
             </form>
           )}

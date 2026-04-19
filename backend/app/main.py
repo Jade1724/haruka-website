@@ -16,6 +16,7 @@ logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
 )
 
+from api.contact import router as contact_router
 from api.journal import router as journal_router
 
 
@@ -32,8 +33,9 @@ app = FastAPI(lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:3000"],
-    allow_methods=["GET"],
+    allow_methods=["GET", "POST"],
     allow_headers=["*"],
 )
 
+app.include_router(contact_router)
 app.include_router(journal_router)

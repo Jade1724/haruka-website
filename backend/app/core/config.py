@@ -9,5 +9,11 @@ class Settings(BaseSettings):
     journals_base_path: str = "Dev/Journals"
     cache_ttl_seconds: int = 600
 
+    smtp_host: str = "smtp.gmail.com"
+    smtp_port: int = 587
+    smtp_user: str
+    smtp_password: str
+    contact_recipient: str
+
 
 settings = Settings()
