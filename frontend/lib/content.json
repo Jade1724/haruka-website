@@ -57,7 +57,7 @@
       "endYear": null,
       "organisation": {
         "name": "Spark New Zealand",
-        "logo": { "id": "/next.svg", "altText": "Spark New Zealand logo" }
+        "logo": { "id": "/experiences/spark-logo.png", "altText": "Spark New Zealand logo" }
       },
       "description": "Developed and maintained applications and systems integrated with AI. Worked on an AI-decisioning marketing system and a B2B sales recommendation system."
     },
@@ -67,7 +67,7 @@
       "endYear": 2023,
       "organisation": {
         "name": "Umajin",
-        "logo": { "id": "/next.svg", "altText": "Umajin logo" }
+        "logo": { "id": "/experiences/umajin-logo.png", "altText": "Umajin logo" }
       },
       "description": "Worked on two projects: a React dashboard app for an automotive oil company client, and a WebXR application using THREE.js with Jest testing."
     }
@@ -79,7 +79,7 @@
       "endYear": 2023,
       "organisation": {
         "name": "University of Canterbury",
-        "logo": { "id": "/next.svg", "altText": "University of Canterbury logo" }
+        "logo": { "id": "/experiences/uc-logo.png", "altText": "University of Canterbury logo" }
       },
       "description": "Project-based master's degree building a full-stack web application to automate invasive plant detection. Worked as a research assistant and built the Apple Thinning agricultural VR training game."
     },
@@ -89,7 +89,7 @@
       "endYear": 2022,
       "organisation": {
         "name": "University of Canterbury",
-        "logo": { "id": "/next.svg", "altText": "University of Canterbury logo" }
+        "logo": { "id": "/experiences/uc-logo.png", "altText": "University of Canterbury logo" }
       },
       "description": "Double major in Computer Science and Physics."
     }
