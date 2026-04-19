@@ -16,14 +16,17 @@ import {
   CarouselNext,
   type CarouselApi,
 } from "@/components/ui/carousel";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import type { ProjectType } from "@/types/project";
 
 type ProjectLink = { type: string; url: string };
 type ProjectImage = { id: string; altText: string };
 
 type ProjectCardProps = {
   title: string;
+  projectType: ProjectType;
   links: ProjectLink[];
   images: ProjectImage[];
   imagePos: "first" | "last";
@@ -104,6 +107,7 @@ function ProjectCarousel({ images }: { images: ProjectImage[] }) {
 
 export default function ProjectCard({
   title,
+  projectType,
   links,
   images,
   imagePos,
@@ -128,7 +132,10 @@ export default function ProjectCard({
       <div className={imagePos === "last" ? "md:order-first" : ""}>
         <div className="flex flex-col gap-4">
           <div className="flex flex-wrap items-start justify-between gap-3">
-            <h2 className="text-lg font-semibold">{title}</h2>
+            <div className="flex flex-col gap-1.5">
+              <h2 className="text-lg font-semibold">{title}</h2>
+              <Badge variant="secondary">{projectType}</Badge>
+            </div>
             <div className="flex flex-wrap gap-2">
               {links.map((link) => (
                 <Link

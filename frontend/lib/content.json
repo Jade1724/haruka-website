@@ -2,6 +2,7 @@
   "projects": [
     {
       "title": "Haruka Website",
+      "projectType": "Personal",
       "imagePos": "first",
       "images": [],
       "links": [
@@ -11,6 +12,7 @@
     },
     {
       "title": "Fruit Maturity Clearance",
+      "projectType": "Commercial",
       "imagePos": "last",
       "images": [],
       "links": [],
@@ -18,6 +20,7 @@
     },
     {
       "title": "B2B Sales Recommendation System",
+      "projectType": "Commercial",
       "imagePos": "first",
       "images": [],
       "links": [],
@@ -25,6 +28,7 @@
     },
     {
       "title": "Spectral Detect",
+      "projectType": "Research",
       "imagePos": "last",
       "images": [
         { "id": "/projects/spectral-detect/file-upload.gif", "altText": "File upload interface" },
@@ -36,6 +40,7 @@
     },
     {
       "title": "Apple Thinning VR",
+      "projectType": "Research",
       "imagePos": "first",
       "images": [
         { "id": "/projects/apple-thinning/tutorial.jpg", "altText": "Tutorial screen" },

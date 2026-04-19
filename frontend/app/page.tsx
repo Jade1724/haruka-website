@@ -1,5 +1,6 @@
 import ProjectCard from "@/components/project-card";
 import content from "@/lib/content.json";
+import type { ProjectType } from "@/types/project";
 
 export default function ProjectsPage() {
   return (
@@ -11,6 +12,7 @@ export default function ProjectsPage() {
             {i > 0 && <hr className="border-border md:hidden" />}
             <ProjectCard
               title={project.title}
+              projectType={project.projectType as ProjectType}
               imagePos={project.imagePos as "first" | "last"}
               images={project.images}
               links={project.links}
