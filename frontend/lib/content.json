@@ -4,7 +4,10 @@
       "title": "Haruka Website",
       "projectType": "Personal",
       "imagePos": "first",
-      "images": [],
+      "images": [
+        { "id": "/projects/haruka-website/experience.png", "altText": "Experience page" },
+        { "id": "/projects/haruka-website/journal.png", "altText": "Journal page" }
+      ],
       "links": [
         { "type": "github", "url": "https://github.com/Jade1724/haruka-website" }
       ],
