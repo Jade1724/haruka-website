@@ -17,7 +17,7 @@ export default function Navbar() {
     <header className="border-b border-border">
       <nav className="mx-auto flex max-w-5xl items-center justify-between px-6 py-4">
         <Link href="/" className="font-semibold text-foreground">
-          haruka
+          Haruka Ichinose
         </Link>
         <ul className="flex gap-6">
           {links.map(({ href, label }) => (
