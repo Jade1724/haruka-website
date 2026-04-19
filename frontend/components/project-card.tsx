@@ -108,51 +108,38 @@ export default function ProjectCard({
   imagePos,
   children,
 }: ProjectCardProps) {
-  const carouselSection = (
-    <div>
-      <ProjectCarousel images={images} />
-    </div>
-  );
-
-  const descriptionSection = (
-    <div className="flex flex-col gap-4">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <h2 className="text-lg font-semibold">{title}</h2>
-        <div className="flex flex-wrap gap-2">
-          {links.map((link) => (
-            <Link
-              key={link.url}
-              href={link.url}
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              <Button variant="outline" size="sm" className="gap-1.5">
-                {linkIcon(link.type)}
-                <span className="capitalize">{link.type}</span>
-              </Button>
-            </Link>
-          ))}
-        </div>
-      </div>
-      <div className="text-sm leading-relaxed text-muted-foreground">
-        {children}
-      </div>
-    </div>
-  );
-
   return (
     <div className="grid grid-cols-1 items-center gap-8 md:grid-cols-2">
-      {imagePos === "first" ? (
-        <>
-          {carouselSection}
-          {descriptionSection}
-        </>
-      ) : (
-        <>
-          {descriptionSection}
-          {carouselSection}
-        </>
-      )}
+      {/* Carousel is always first in DOM so it appears on top on mobile */}
+      <div className={imagePos === "last" ? "md:order-last" : ""}>
+        <ProjectCarousel images={images} />
+      </div>
+
+      <div className={imagePos === "last" ? "md:order-first" : ""}>
+        <div className="flex flex-col gap-4">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <h2 className="text-lg font-semibold">{title}</h2>
+            <div className="flex flex-wrap gap-2">
+              {links.map((link) => (
+                <Link
+                  key={link.url}
+                  href={link.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  <Button variant="outline" size="sm" className="gap-1.5">
+                    {linkIcon(link.type)}
+                    <span className="capitalize">{link.type}</span>
+                  </Button>
+                </Link>
+              ))}
+            </div>
+          </div>
+          <div className="text-sm leading-relaxed text-muted-foreground">
+            {children}
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
