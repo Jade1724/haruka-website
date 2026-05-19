@@ -20,9 +20,16 @@ AKS Cluster (1 node, Standard_B2s)
         ├── /journals → backend pod (FastAPI, port 8000)
         ├── /contact  → backend pod
         └── /         → frontend pod (Next.js, port 3000)
+
+Secret resolution (runtime, no env var injection):
+  backend pod (workload identity ServiceAccount)
+    → Secrets Store CSI Driver
+      → Azure Key Vault  (GITHUB_TOKEN, SMTP_*, CONTACT_RECIPIENT, ALLOWED_ORIGINS)
+        ← User-Assigned Managed Identity (UAMI)
+          ← Federated credential bound to the K8s ServiceAccount via AKS OIDC issuer
 ```
 
-Secrets (GitHub token, SMTP creds) live in a Kubernetes Secret, injected as env vars into the backend pod.
+Secrets live in Azure Key Vault. The backend pod authenticates via workload identity (OIDC federation → UAMI → Key Vault RBAC). The CSI driver mounts secrets as a volume; the deployment reads them from there. No K8s Secret object, no secret values in GitHub Actions.
 
 ---
 
@@ -48,17 +55,20 @@ backend/
 docker-compose.yml        ← local testing of both containers
 infra/                    ← Terraform
   providers.tf
-  main.tf                 ← resource group, ACR, AKS, static public IP
+  main.tf                 ← resource group, ACR, AKS, static public IP,
+                             Key Vault, UAMI, federated credential, RBAC
   variables.tf
-  outputs.tf              ← ingress IP, ACR login server, kube config
+  outputs.tf              ← ingress IP, ACR login server, kube config,
+                             Key Vault URI, UAMI client ID
 k8s/
   namespace.yaml
-  backend-secret.yaml     ← K8s Secret (GITHUB_TOKEN, SMTP_*, ALLOWED_ORIGINS)
-  backend-deployment.yaml
-  backend-service.yaml    ← ClusterIP, port 8000
+  backend-serviceaccount.yaml  ← ServiceAccount annotated with UAMI client ID
+  secret-provider-class.yaml   ← SecretProviderClass (Key Vault → CSI mount)
+  backend-deployment.yaml      ← CSI volume mount; reads secrets from /mnt/secrets/
+  backend-service.yaml         ← ClusterIP, port 8000
   frontend-deployment.yaml
-  frontend-service.yaml   ← ClusterIP, port 3000
-  ingress.yaml            ← nginx path-based routing, static IP annotation
+  frontend-service.yaml        ← ClusterIP, port 3000
+  ingress.yaml                 ← nginx path-based routing, static IP annotation
 .github/
   workflows/
     deploy.yml            ← CI/CD: build → push to ACR → kubectl apply
@@ -100,18 +110,34 @@ Local integration test for both services before touching Azure.
 
 ## Phase 3 — Terraform (`infra/`)
 
-| Resource | SKU | Purpose |
+| Resource | SKU / Config | Purpose |
 |---|---|---|
 | `azurerm_resource_group` | — | Container for all resources |
 | `azurerm_container_registry` | Basic | Store Docker images |
-| `azurerm_kubernetes_cluster` | 1× Standard_B2s | Run pods |
+| `azurerm_kubernetes_cluster` | 1× Standard_B2s | Run pods; `oidc_issuer_enabled = true`, `workload_identity_enabled = true`, `key_vault_secrets_provider` add-on enabled |
 | `azurerm_public_ip` | Static | Fixed IP for nginx ingress |
+| `azurerm_key_vault` | Standard | Store all backend secrets |
+| `azurerm_user_assigned_identity` | — | UAMI for the backend pod |
+| `azurerm_federated_identity_credential` | — | Binds the K8s ServiceAccount (`haruka/backend`) to the UAMI via AKS OIDC issuer |
+| `azurerm_role_assignment` | `Key Vault Secrets User` | Grants UAMI read access to Key Vault secrets |
 
-One-time setup:
+Key Vault secrets to populate manually after `terraform apply` (one-time):
+
+```bash
+az keyvault secret set --vault-name <kv-name> --name GITHUB-TOKEN     --value "..."
+az keyvault secret set --vault-name <kv-name> --name SMTP-USER         --value "..."
+az keyvault secret set --vault-name <kv-name> --name SMTP-PASSWORD     --value "..."
+az keyvault secret set --vault-name <kv-name> --name SMTP-HOST         --value "smtp.gmail.com"
+az keyvault secret set --vault-name <kv-name> --name SMTP-PORT         --value "587"
+az keyvault secret set --vault-name <kv-name> --name CONTACT-RECIPIENT --value "..."
+az keyvault secret set --vault-name <kv-name> --name ALLOWED-ORIGINS   --value "http://<ingress-ip>"
+```
+
+One-time Terraform setup:
 ```bash
 az login
 terraform -chdir=infra init
-terraform -chdir=infra apply    # note the ingress_ip output
+terraform -chdir=infra apply    # note ingress_ip, key_vault_uri, uami_client_id outputs
 ```
 
 ---
@@ -128,14 +154,20 @@ helm install ingress-nginx ingress-nginx/ingress-nginx \
 
 ## Phase 5 — Kubernetes Manifests (`k8s/`)
 
-### `backend-secret.yaml`
-K8s Secret holding all sensitive backend env vars. Values are base64-encoded. Do not commit real values — apply manually or use sealed-secrets.
+### `backend-serviceaccount.yaml`
+A dedicated `ServiceAccount` in the `haruka` namespace annotated with the UAMI client ID:
+```yaml
+annotations:
+  azure.workload.identity/client-id: "<uami-client-id>"
+```
+The pod will carry the `azure.workload.identity/use: "true"` label so the mutating webhook injects the OIDC token projection automatically.
 
-Variables: `GITHUB_TOKEN`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_HOST`, `SMTP_PORT`, `CONTACT_RECIPIENT`, `ALLOWED_ORIGINS` (set to `http://<ingress-ip>`)
+### `secret-provider-class.yaml`
+A `SecretProviderClass` (kind: `SecretProviderClass`, provider: `azure`) that maps each Key Vault secret to a file under `/mnt/secrets/` inside the pod. Specifies the Key Vault name, tenant ID, and the list of secret objects (e.g. `GITHUB-TOKEN` → file `github-token`).
 
 ### Deployments
-- **backend:** 1 replica, env from Secret, liveness/readiness probe `GET /health`
-- **frontend:** 1 replica, `NEXT_PUBLIC_API_URL` baked into image at build time
+- **backend:** 1 replica; uses the `backend` ServiceAccount; mounts the CSI volume at `/mnt/secrets/`; app reads secret values from those files at startup (e.g. `open("/mnt/secrets/github-token").read()`); liveness/readiness probe `GET /health`. No `env` block for secrets.
+- **frontend:** 1 replica, `NEXT_PUBLIC_API_URL` baked into image at build time.
 
 ### `ingress.yaml`
 Path-based routing:
@@ -156,12 +188,8 @@ Trigger: push to `main`
 | `AZURE_CREDENTIALS` | Service principal JSON (`az ad sp create-for-rbac`) |
 | `ACR_LOGIN_SERVER` | e.g. `harukaacr.azurecr.io` |
 | `NEXT_PUBLIC_API_URL` | `http://<ingress-ip>` |
-| `GH_TOKEN` | GitHub token for Obsidian repo |
-| `SMTP_USER` | Gmail address |
-| `SMTP_PASSWORD` | Gmail app password |
-| `SMTP_HOST` | `smtp.gmail.com` |
-| `SMTP_PORT` | `587` |
-| `CONTACT_RECIPIENT` | Destination email |
+
+Backend secrets (`GITHUB_TOKEN`, `SMTP_*`, `CONTACT_RECIPIENT`, `ALLOWED_ORIGINS`) are **not** stored in GitHub Actions. They live exclusively in Azure Key Vault and are fetched at pod startup via the CSI driver.
 
 **Jobs:**
 1. `build-push` — `docker build` + `docker push` for both images to ACR
@@ -174,10 +202,11 @@ Trigger: push to `main`
 1. Code changes (`next.config.ts`, health endpoint)
 2. Dockerfiles + `.dockerignore` files
 3. `docker-compose.yml` — test locally
-4. Terraform — provision infrastructure, note static IP
+4. Terraform — provision infrastructure (AKS with OIDC + workload identity + CSI add-on, Key Vault, UAMI, federated credential, RBAC); note `ingress_ip`, `key_vault_uri`, `uami_client_id` outputs
 5. Helm — install nginx ingress controller
-6. K8s manifests
-7. GitHub Actions workflow
+6. Populate Key Vault secrets manually via `az keyvault secret set` (one-time)
+7. K8s manifests (`backend-serviceaccount.yaml`, `secret-provider-class.yaml`, deployments, services, ingress)
+8. GitHub Actions workflow
 
 ---
 
