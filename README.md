@@ -58,6 +58,18 @@ haruka-website/
 └── README.md         # This file
 ```
 
+## Docker
+
+### Frontend
+
+```bash
+# Build
+docker build --build-arg NEXT_PUBLIC_API_URL=http://localhost:8000 -t frontend ./frontend
+
+# Run
+docker run -p 3000:3000 frontend
+```
+
 ## Development Setup
 
 ### Prerequisites
