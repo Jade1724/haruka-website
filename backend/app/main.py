@@ -18,6 +18,7 @@ logging.basicConfig(
 
 from api.contact import router as contact_router
 from api.journal import router as journal_router
+from api.health import router as health_router
 from core.config import settings
 
 
@@ -40,3 +41,4 @@ app.add_middleware(
 
 app.include_router(contact_router)
 app.include_router(journal_router)
+app.include_router(health_router)
