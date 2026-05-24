@@ -60,7 +60,47 @@ haruka-website/
 
 ## Docker
 
-### Frontend
+The easiest way to run the full stack locally is **Docker Compose**, which starts the
+backend and frontend together with hot reload. You can also build and run each image on its own.
+
+### Docker Compose (local development)
+
+Runs both services with the source bind-mounted for hot reload — edits under `backend/app/`
+or `frontend/` are picked up automatically, no rebuild required.
+
+**Prerequisites**
+- Docker Desktop (includes Docker Compose v2)
+- A `backend/.env` file with the backend secrets (see [Environment Variables](#environment-variables)).
+  Values must be **unquoted** — `docker compose` does not strip surrounding quotes, so a quoted
+  token would be sent with the quotes included.
+
+```bash
+# Start both services (builds images on first run)
+docker compose up --build
+
+# Subsequent runs (no rebuild)
+docker compose up
+
+# Stop and remove the containers
+docker compose down
+
+# ...and also remove the anonymous volumes (node_modules, .next cache)
+docker compose down -v
+```
+
+Once it's up:
+
+| Service | URL |
+|---|---|
+| Frontend | http://localhost:3000 |
+| Backend | http://localhost:8000 |
+| Backend health check | http://localhost:8000/health |
+
+### Individual images
+
+#### Frontend
+
+`NEXT_PUBLIC_API_URL` is baked in at **build time**, so set it via `--build-arg` (rebuild to change it):
 
 ```bash
 # Build
@@ -68,6 +108,18 @@ docker build --build-arg NEXT_PUBLIC_API_URL=http://localhost:8000 -t frontend .
 
 # Run
 docker run -p 3000:3000 frontend
+```
+
+#### Backend
+
+Secrets are provided at **runtime** via `--env-file`:
+
+```bash
+# Build
+docker build -t backend ./backend
+
+# Run
+docker run -p 8000:8000 --env-file backend/.env backend
 ```
 
 ## Development Setup
