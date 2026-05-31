@@ -31,6 +31,25 @@ Secret resolution (runtime, no env var injection):
 
 Secrets live in Azure Key Vault. The backend pod authenticates via workload identity (OIDC federation → UAMI → Key Vault RBAC). The CSI driver mounts secrets as a volume; the deployment reads them from there. No K8s Secret object, no secret values in GitHub Actions.
 
+### Secrets Management — two tiers
+
+**Tier 1 — Application runtime secrets** (consumed by running pods):
+`GITHUB_TOKEN`, `SMTP_*`, `CONTACT_RECIPIENT`, `ALLOWED_ORIGINS`.
+Strict handling only: Azure Key Vault → Secrets Store CSI Driver → workload
+identity. No env var injection, no K8s Secret objects, never stored in CI/CD.
+
+**Tier 2 — Operator & tooling credentials** (used to provision/deploy, never
+by the app itself):
+- Local Terraform → Azure: interactive `az login` session (no stored secret).
+- CI/CD → Azure: service principal (`AZURE_CREDENTIALS`), later upgradable to
+  GitHub OIDC federation.
+- Terraform state backend access: via the operator's Azure RBAC.
+
+These authenticate the *operator or pipeline*, not the workload, so they are
+managed flexibly (az session, env vars, CI secrets). They deliberately do **not**
+live in Key Vault — they are needed to *create* Key Vault in the first place
+(bootstrapping), so storing them there would be circular.
+
 ---
 
 ## Files to Create / Modify
