@@ -4,6 +4,10 @@
 
 Currently deployed to Vercel (serverless). Goal is to migrate to personal Azure infrastructure for hands-on experience with Docker, Kubernetes, Terraform, and Azure services — without overengineering. Custom domain is a future enhancement; for now a static Azure public IP is used so `NEXT_PUBLIC_API_URL` is known before the first build. CI/CD via GitHub Actions on push to `main`.
 
+**Ingress (revised Jun 2026):** the original plan used the community ingress-nginx controller, which was **retired in March 2026** — repositories are read-only with no further security fixes, following the CVSS 9.8 "IngressNightmare" RCE (CVE-2025-1974). It is replaced with **self-managed Istio (Helm) in ambient mode**, fronted by the **Gateway API** (`Gateway` + `HTTPRoute`). Chosen to learn Istio fundamentals and good practices hands-on, while staying light enough to run on a single small node.
+
+**Future (not built yet):** TLS via cert-manager + Let's Encrypt and a custom domain when going public; separate `dev`/`prod` environments (parameterized Terraform, per-environment namespaces, then separate clusters/state).
+
 ---
 
 ## Architecture
@@ -15,11 +19,13 @@ GitHub Push → GitHub Actions
   ├── Push both → Azure Container Registry (ACR)
   └── kubectl apply → AKS
 
-AKS Cluster (1 node, Standard_B2s)
-  └── nginx ingress  (static public IP, provisioned by Terraform)
+AKS Cluster (1 node, Standard_B2as_v2)
+  └── Istio ingress gateway — Envoy  (static public IP, provisioned by Terraform)
+        │   (Gateway API: Gateway + HTTPRoute, gatewayClassName: istio)
         ├── /journals → backend pod (FastAPI, port 8000)
         ├── /contact  → backend pod
         └── /         → frontend pod (Next.js, port 3000)
+        ↳ east-west traffic secured by Istio ambient mesh (per-node ztunnel, mTLS) — no sidecars
 
 Secret resolution (runtime, no env var injection):
   backend pod (workload identity ServiceAccount)
@@ -80,14 +86,15 @@ infra/                    ← Terraform
   outputs.tf              ← ingress IP, ACR login server, kube config,
                              Key Vault URI, UAMI client ID
 k8s/
-  namespace.yaml
+  namespace.yaml               ← haruka ns, labelled istio.io/dataplane-mode=ambient
   backend-serviceaccount.yaml  ← ServiceAccount annotated with UAMI client ID
   secret-provider-class.yaml   ← SecretProviderClass (Key Vault → CSI mount)
   backend-deployment.yaml      ← CSI volume mount; reads secrets from /mnt/secrets/
   backend-service.yaml         ← ClusterIP, port 8000
   frontend-deployment.yaml
   frontend-service.yaml        ← ClusterIP, port 3000
-  ingress.yaml                 ← nginx path-based routing, static IP annotation
+  gateway.yaml                 ← Gateway API Gateway (gatewayClassName: istio); static IP via azure-pip-name
+  httproute.yaml               ← HTTPRoute(s): path-based routing to backend/frontend
 .github/
   workflows/
     deploy.yml            ← CI/CD: build → push to ACR → kubectl apply
@@ -133,7 +140,7 @@ Local integration test for both services before touching Azure.
 |---|---|---|
 | `azurerm_resource_group` | — | Container for all resources |
 | `azurerm_container_registry` | Basic | Store Docker images |
-| `azurerm_kubernetes_cluster` | 1× Standard_B2s | Run pods; `oidc_issuer_enabled = true`, `workload_identity_enabled = true`, `key_vault_secrets_provider` add-on enabled |
+| `azurerm_kubernetes_cluster` | 1× Standard_B2as_v2 | Run pods; `oidc_issuer_enabled = true`, `workload_identity_enabled = true`, `key_vault_secrets_provider` add-on enabled |
 | `azurerm_public_ip` | Static | Fixed IP for nginx ingress |
 | `azurerm_key_vault` | Standard | Store all backend secrets |
 | `azurerm_user_assigned_identity` | — | UAMI for the backend pod |
@@ -161,17 +168,47 @@ terraform -chdir=infra apply    # note ingress_ip, key_vault_uri, uami_client_id
 
 ---
 
-## Phase 4 — nginx Ingress (Helm, one-time)
+## Phase 4 — Istio ambient via Helm (one-time)
+
+Self-managed Istio in **ambient mode** (sidecar-less). The ingress gateway is created later
+via the Gateway API (Phase 5), which makes istiod auto-deploy the Envoy gateway.
 
 ```bash
-helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
-helm install ingress-nginx ingress-nginx/ingress-nginx \
-  --set controller.service.loadBalancerIP=<ingress-ip>
+# 1. Gateway API CRDs (AKS does not ship them)
+kubectl get crd gateways.gateway.networking.k8s.io >/dev/null 2>&1 || \
+  kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.2.0/standard-install.yaml
+
+# 2. Istio Helm repo
+helm repo add istio https://istio-release.storage.googleapis.com/charts
+helm repo update
+
+# 3. Ambient components (control-plane requests tuned down for the single small node)
+helm install istio-base istio/base -n istio-system --create-namespace
+helm install istiod istio/istiod -n istio-system --set profile=ambient \
+  --set pilot.resources.requests.cpu=100m --set pilot.resources.requests.memory=256Mi --wait
+helm install istio-cni istio/cni -n istio-system --set profile=ambient
+helm install ztunnel istio/ztunnel -n istio-system
 ```
+
+Verify: `kubectl get pods -n istio-system` → `istiod`, `istio-cni` (DaemonSet), `ztunnel`
+(DaemonSet) all Running. Install `istioctl` locally for inspection.
+
+> **Caveat:** ambient traffic redirection runs over AKS's Azure CNI. If ztunnel does not capture
+> workload traffic, check `istio-cni` logs — Azure CNI is supported but is the most likely snag.
+> Confirm enrollment with `istioctl ztunnel-config workloads`.
 
 ---
 
 ## Phase 5 — Kubernetes Manifests (`k8s/`)
+
+### `namespace.yaml`
+The `haruka` namespace, labelled to enroll its pods into the Istio **ambient** mesh — no sidecar
+injection, enrollment is purely a namespace label:
+```yaml
+metadata:
+  labels:
+    istio.io/dataplane-mode: ambient
+```
 
 ### `backend-serviceaccount.yaml`
 A dedicated `ServiceAccount` in the `haruka` namespace annotated with the UAMI client ID:
@@ -188,8 +225,20 @@ A `SecretProviderClass` (kind: `SecretProviderClass`, provider: `azure`) that ma
 - **backend:** 1 replica; uses the `backend` ServiceAccount; mounts the CSI volume at `/mnt/secrets/`; app reads secret values from those files at startup (e.g. `open("/mnt/secrets/github-token").read()`); liveness/readiness probe `GET /health`. No `env` block for secrets.
 - **frontend:** 1 replica, `NEXT_PUBLIC_API_URL` baked into image at build time.
 
-### `ingress.yaml`
-Path-based routing:
+### `gateway.yaml`
+A Gateway API `Gateway` with `gatewayClassName: istio`; istiod auto-deploys an Envoy gateway
+Deployment + a `LoadBalancer` Service for it. One HTTP listener on port 80 (TLS is a future phase).
+Bind the pre-provisioned static IP to the generated Service via `spec.infrastructure.annotations`:
+```yaml
+annotations:
+  service.beta.kubernetes.io/azure-pip-name: pip-haruka-ingress
+```
+References the existing public IP **by name** (the `loadBalancerIP` Service field is deprecated in
+k8s ≥1.24). No `azure-load-balancer-resource-group` annotation needed — the IP already lives in the
+node resource group.
+
+### `httproute.yaml`
+`HTTPRoute`(s) attached to the Gateway, replacing the old path-based Ingress rules:
 - `/journals` → `backend-service:8000`
 - `/contact` → `backend-service:8000`
 - `/` → `frontend-service:3000`
@@ -222,9 +271,9 @@ Backend secrets (`GITHUB_TOKEN`, `SMTP_*`, `CONTACT_RECIPIENT`, `ALLOWED_ORIGINS
 2. Dockerfiles + `.dockerignore` files
 3. `docker-compose.yml` — test locally
 4. Terraform — provision infrastructure (AKS with OIDC + workload identity + CSI add-on, Key Vault, UAMI, federated credential, RBAC); note `ingress_ip`, `key_vault_uri`, `uami_client_id` outputs
-5. Helm — install nginx ingress controller
+5. Helm — install Gateway API CRDs + Istio ambient (base, istiod, cni, ztunnel)
 6. Populate Key Vault secrets manually via `az keyvault secret set` (one-time)
-7. K8s manifests (`backend-serviceaccount.yaml`, `secret-provider-class.yaml`, deployments, services, ingress)
+7. K8s manifests (`namespace.yaml` w/ ambient label, `backend-serviceaccount.yaml`, `secret-provider-class.yaml`, deployments, services, `gateway.yaml`, `httproute.yaml`)
 8. GitHub Actions workflow
 
 ---
@@ -237,8 +286,14 @@ docker-compose up
 curl http://localhost:8000/health    # backend health
 curl http://localhost:3000           # frontend loads
 
-# Azure (after deploy)
-curl http://<ingress-ip>/health      # backend health via ingress
+# Azure — Istio (after deploy)
+kubectl get pods -n istio-system     # istiod, istio-cni, ztunnel Running
+istioctl ztunnel-config workloads    # app pods enrolled in the ambient mesh
+kubectl get gateway -n haruka        # PROGRAMMED=True
+kubectl get svc -n haruka            # gateway Service EXTERNAL-IP == static IP (4.196.65.234)
+
+# Azure — app via the Istio gateway
+curl http://<ingress-ip>/health      # backend health via gateway
 curl http://<ingress-ip>/journals    # journals API
 curl http://<ingress-ip>             # Next.js frontend
 kubectl get pods -n haruka           # all pods Running
