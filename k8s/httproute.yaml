@@ -1,0 +1,27 @@
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: haruka-routes
+  namespace: haruka
+spec: 
+  parentRefs:
+    - name: haruka-gateway
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /journals
+        - path:
+            type: PathPrefix
+            value: /contact
+      backendRefs:
+        - name: backend-service
+          port: 8000
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        - name: frontend-service
+          port: 3000
+  
