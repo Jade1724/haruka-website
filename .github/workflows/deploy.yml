@@ -1,0 +1,79 @@
+name: Deploy to AKS
+
+on:
+  push:
+    branches: [main]
+
+env:
+  ACR_NAME: acrharuka
+  RESOURCE_GROUP: rg-haruka
+  AKS_CLUSTER: aks-haruka
+  NAMESPACE: haruka
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  build-push:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Build and push backend
+        run: |
+          az acr build \
+            --registry $ACR_NAME \
+            --image backend:${{ github.sha }} \
+            --image backend:latest \
+            ./backend
+
+      - name: Build and push frontend
+        run: |
+          az acr build \
+            --registry $ACR_NAME \
+            --image frontend:${{ github.sha }} \
+            --image frontend:latest \
+            --build-arg NEXT_PUBLIC_API_URL=${{ secrets.NEXT_PUBLIC_API_URL }} \
+            ./frontend
+
+  deploy:
+    needs: build-push
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Get AKS credentials
+        run: |
+          az aks get-credentials \
+            --resource-group $RESOURCE_GROUP \
+            --name $AKS_CLUSTER \
+            --overwrite-existing
+
+      - name: Apply manifests
+        run: kubectl apply -f k8s/
+
+      - name: Roll out new images
+        run: |
+          kubectl set image deployment/backend \
+            backend=${{ secrets.ACR_LOGIN_SERVER }}/backend:${{ github.sha }} \
+            -n $NAMESPACE
+          kubectl set image deployment/frontend \
+            frontend=${{ secrets.ACR_LOGIN_SERVER }}/frontend:${{ github.sha }} \
+            -n $NAMESPACE
+          kubectl rollout status deployment/backend -n $NAMESPACE --timeout=120s
+          kubectl rollout status deployment/frontend -n $NAMESPACE --timeout=120s
+
+

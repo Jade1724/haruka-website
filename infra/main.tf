@@ -40,6 +40,10 @@ resource "azurerm_kubernetes_cluster" "main" {
     name       = "default"
     node_count = var.node_count
     vm_size    = var.node_vm_size
+
+    upgrade_settings {
+      max_surge = "10%"
+    }
   }
 
   identity {
@@ -118,5 +122,37 @@ resource "azurerm_public_ip" "ingress" {
   allocation_method   = "Static"
   sku                 = "Standard"
   tags                = var.tags
+}
+
+# -- CI/CD identity (GitHub Actions) ------------------------------ 
+
+resource "azurerm_user_assigned_identity" "cicd" {
+  name                = "id-${var.project}-cicd"
+  resource_group_name = azurerm_resource_group.main.name
+  location            = azurerm_resource_group.main.location
+  tags                = var.tags
+}
+
+# Trust: GitHub Actions on the main branch -> this UAMI, via GitHub's OIDC issuer
+resource "azurerm_federated_identity_credential" "cicd" {
+  name      = "github-actions-main"
+  parent_id = azurerm_user_assigned_identity.cicd.id
+  audience  = ["api://AzureADTokenExchange"]
+  issuer    = "https://token.actions.githubusercontent.com"
+  subject   = "repo:${var.github_repo}:ref:refs/heads/main"
+}
+
+# Let CI run `az acr build` (queues an ACR Task -> needs Contributor, not just AcrPush)
+resource "azurerm_role_assignment" "cicd_acr" {
+  scope                = azurerm_container_registry.main.id
+  role_definition_name = "Contributor"
+  principal_id         = azurerm_user_assigned_identity.cicd.principal_id
+}
+
+# Let CI run `az aks get-credentials` and kubectl apply
+resource "azurerm_role_assignment" "cicd_aks" {
+  scope                = azurerm_kubernetes_cluster.main.id
+  role_definition_name = "Azure Kubernetes Service Cluster User Role"
+  principal_id         = azurerm_user_assigned_identity.cicd.principal_id
 }
 

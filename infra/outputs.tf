@@ -33,3 +33,12 @@ output "node_resource_group" {
   value       = azurerm_kubernetes_cluster.main.node_resource_group
 }
 
+output "cicd_client_id" {
+  description = "CI/CD UAMI client ID for the GitHub Actions azure/login step"
+  value       = azurerm_user_assigned_identity.cicd.client_id
+}
+
+output "subscription_id" {
+  description = "Subscription ID for the GitHub Actions azure/login step"
+  value       = data.azurerm_client_config.current.subscription_id
+}

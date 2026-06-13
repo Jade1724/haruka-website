@@ -48,3 +48,8 @@ variable "tags" {
   }
 }
 
+variable "github_repo" {
+  description = "GitHub repo (owner/name) allowed to federate into the CI/CD indentity"
+  type        = string
+  default     = "Jade1724/haruka-website"
+}
