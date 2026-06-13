@@ -53,3 +53,9 @@ variable "github_repo" {
   type        = string
   default     = "Jade1724/haruka-website"
 }
+
+variable "github_branch" {
+  description = "Git branch allowed to federate into the CI/CD identity and trigger deploys"
+  type        = string
+  default     = "azure-migration"
+}

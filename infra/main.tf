@@ -133,13 +133,13 @@ resource "azurerm_user_assigned_identity" "cicd" {
   tags                = var.tags
 }
 
-# Trust: GitHub Actions on the main branch -> this UAMI, via GitHub's OIDC issuer
+# Trust: GitHub Actions on the deploy branch -> this UAMI, via GitHub's OIDC issuer
 resource "azurerm_federated_identity_credential" "cicd" {
-  name      = "github-actions-main"
-  parent_id = azurerm_user_assigned_identity.cicd.id
-  audience  = ["api://AzureADTokenExchange"]
-  issuer    = "https://token.actions.githubusercontent.com"
-  subject   = "repo:${var.github_repo}:ref:refs/heads/main"
+  name                      = "github-actions-deploy"
+  user_assigned_identity_id = azurerm_user_assigned_identity.cicd.id
+  audience                  = ["api://AzureADTokenExchange"]
+  issuer                    = "https://token.actions.githubusercontent.com"
+  subject                   = "repo:${var.github_repo}:ref:refs/heads/${var.github_branch}"
 }
 
 # Let CI run `az acr build` (queues an ACR Task -> needs Contributor, not just AcrPush)
