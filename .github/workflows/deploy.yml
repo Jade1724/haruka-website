@@ -1,8 +1,9 @@
 name: Deploy to AKS
 
+# Manual-only for now — no branch push auto-deploys while Azure is torn down.
+# Run from the Actions tab (or re-add a `push:` trigger) once the infra is rebuilt.
 on:
-  push:
-    branches: [azure-migration]
+  workflow_dispatch:
 
 env:
   ACR_NAME: acrharuka

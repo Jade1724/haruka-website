@@ -57,5 +57,5 @@ variable "github_repo" {
 variable "github_branch" {
   description = "Git branch allowed to federate into the CI/CD identity and trigger deploys"
   type        = string
-  default     = "azure-migration"
+  default     = "main"
 }
