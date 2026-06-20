@@ -20,8 +20,8 @@ A modern portfolio website showcasing my projects, professional experience, educ
 - Integration with personal knowledge management system
 
 ### Deployment
-- Frontend deployed on Vercel
-- Backend API deployed on Vercel (serverless functions)
+- **Currently hosted on Vercel** — frontend and backend API (serverless functions)
+- Azure/AKS deployment configuration is also present in the repo (Terraform, Kubernetes manifests, Dockerfiles, GitHub Actions) but is not the active host
 - Automated CI/CD pipelines
 
 ## Tech Stack
@@ -159,10 +159,29 @@ The dev journal feature scrapes content from a private Obsidian repository:
 
 ## Deployment
 
-### Vercel Configuration
+This repository keeps **two deployment setups side by side**. Vercel is the **active host**;
+the Azure/AKS setup is fully configured and committed but currently dormant, kept as a
+migration target and reference. The two are independent — Vercel ignores the Azure files, and
+the Azure pipeline ignores the Vercel files.
+
+| Target | Status | Key files |
+|---|---|---|
+| **Vercel** | **Active (live host)** | `frontend/vercel.json`, `backend/vercel.json`, `backend/api/index.py`, `backend/requirements.txt` |
+| **Azure / AKS** | Configured, dormant | `infra/` (Terraform), `k8s/` (manifests), `frontend/Dockerfile`, `backend/Dockerfile`, `.github/workflows/deploy.yml` |
+
+### Vercel Configuration (active)
 - Frontend: Automatic deployment from `frontend/` directory
 - Backend: Serverless functions in `backend/` directory
 - Environment variables for API keys and database connections
+
+### Azure / AKS Configuration (dormant)
+- Infrastructure provisioned via Terraform in `infra/`
+- Workloads defined as Kubernetes manifests in `k8s/`
+- Container images built from `frontend/Dockerfile` and `backend/Dockerfile`
+- The `.github/workflows/deploy.yml` workflow builds images to ACR and rolls them out to AKS.
+  It is **triggered only on the `azure-migration` branch**, so pushes to `main` do not deploy to Azure.
+  To make Azure the active host, point that workflow's trigger at `main` and connect DNS to the
+  AKS ingress.
 
 ### Environment Variables
 ```
