@@ -40,7 +40,7 @@ uv run python -m mecha_llm.eval.ragas_eval
 
 ```
 mecha_llm/
-  config.py          # pydantic-settings (Azure OpenAI, AI Search, Langfuse)
+  config.py          # pydantic-settings (Azure OpenAI, AI Search, Azure Monitor/OTel)
   sources/           # journals, content.json (projects/experience), site routes
   chunking.py        # markdown-aware, token-bounded chunker
   embeddings.py      # async Azure OpenAI embeddings

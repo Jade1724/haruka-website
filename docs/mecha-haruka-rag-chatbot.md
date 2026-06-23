@@ -28,7 +28,7 @@ guardrails, observability, and evaluation — using popular, open-source, indust
 | Hosting | Frontend + backend stay on **Vercel**; they call Azure AI over HTTPS | Vercel is the live host; RAG resources are just APIs reachable with endpoint+key — the app need not run inside Azure |
 | LLM + embeddings | **Azure OpenAI** via **Azure AI Foundry** | Required; mirrors Haruka's day-job Azure OpenAI experience |
 | Vector store / retrieval | **Azure AI Search** (hybrid vector + keyword, semantic reranker) | AI Foundry-native, managed, supports hybrid + reranking out of the box |
-| Observability | **Langfuse** | Most-adopted open-source LLM observability; OTel + SDK decorators; traces, tokens, cost, latency, eval scores |
+| Observability | **OpenTelemetry → Azure Monitor / Application Insights** | Vendor-neutral OTel GenAI instrumentation exported to App Insights; Azure-native (fits the all-Azure design), managed, queryable with KQL; captures traces, token usage, latency |
 | Evaluation | **RAGAS** + **DeepEval** | RAGAS for RAG-quality metrics; DeepEval for pytest-style assertions, bias/toxicity, and red-teaming |
 | Safety | **Azure AI Content Safety** (Prompt Shields + harmful-category checks) + grounding/citations | Blocks jailbreaks/prompt-injection and harmful content; grounding curbs hallucination |
 | IaC | **No Terraform** for LLM resources for now | Resources provisioned by hand via `az`/Foundry; app reads endpoint+key from config |
@@ -64,9 +64,9 @@ guardrails, observability, and evaluation — using popular, open-source, indust
    floating chat widget          rag_service: guardrails → retrieve → grounded prompt
    (Next.js)                      → Azure OpenAI chat (stream) → citations (links/routes)
                                       │                 │
-                             Azure AI Content     Langfuse trace
+                             Azure AI Content     OTel span → App Insights
                              Safety (Prompt        (retrieval, prompt, completion,
-                             Shields + categories) tokens, cost, latency, safety verdicts)
+                             Shields + categories) tokens, latency, safety verdicts)
 ```
 
 **Retrieval-and-cite contract.** Every indexed chunk carries metadata
@@ -83,7 +83,7 @@ llm/                                  # NEW — offline async pipeline + eval ON
   README.md
   .env.example
   mecha_llm/
-    config.py                         # pydantic-settings (Azure OpenAI, AI Search, Langfuse)
+    config.py                         # pydantic-settings (Azure OpenAI, AI Search, Azure Monitor/OTel)
     sources/
       journals.py                     # pull journal markdown (mirrors backend GithubDAO)
       content_json.py                 # load frontend/lib/content.json (projects + experience)
@@ -94,7 +94,7 @@ llm/                                  # NEW — offline async pipeline + eval ON
     build.py                          # async orchestration: ingest -> chunk -> embed -> upsert
     eval/
       dataset.py                      # golden Q/A set + RAGAS synthetic test-set generation
-      ragas_eval.py                   # RAG quality metrics, logs scores to Langfuse
+      ragas_eval.py                   # RAG quality metrics, emits scores as App Insights custom events
       deepeval_tests.py               # pytest: G-Eval, bias, toxicity, hallucination
       redteam.py                      # DeepEval red-team / jailbreak suite
   tests/
@@ -106,10 +106,10 @@ backend/app/                          # CHANGED — real-time chat
   services/rag_service.py             # NEW: guardrails -> retrieve -> prompt -> stream -> cite
   api/chat.py                         # NEW: POST /chat (SSE StreamingResponse)
   models/chat.py                      # NEW: ChatRequest, ChatChunk, Citation
-  core/config.py                      # add Azure OpenAI / AI Search / Langfuse / safety settings
+  core/config.py                      # add Azure OpenAI / AI Search / App Insights / safety settings
   core/factory.py                     # add get_rag_service(request)
-  observability.py                    # NEW: Langfuse client + @observe helpers
-  main.py                             # register chat_router; init clients + Langfuse in lifespan
+  observability.py                    # NEW: configure_azure_monitor() + OpenAI/FastAPI instrumentation + tracer
+  main.py                             # register chat_router; init clients + OTel/Azure Monitor in lifespan
 
 frontend/                             # CHANGED — chat widget
   components/chat/
@@ -163,7 +163,7 @@ clients created in `main.py` lifespan, pydantic-settings config).
      repos/facts; politely decline + suggest a page when off-scope; always cite);
   4. stream the Azure OpenAI completion;
   5. assemble `citations[]` from retrieved metadata;
-  6. wrap the turn in a Langfuse trace.
+  6. wrap the turn in an OTel span (exported to Application Insights).
 - **Route** (`api/chat.py`) — `POST /chat` → `StreamingResponse` (SSE) of token deltas, terminating
   with a `citations` event; `Depends(get_rag_service)`. Verify SSE streams un-buffered through
   Vercel's Python runtime (`backend/api/index.py` + `vercel.json`); fallback to a non-streamed
@@ -196,20 +196,31 @@ clients created in `main.py` lifespan, pydantic-settings config).
 - **Harmful content & bias/fairness** — Content Safety harmful-category checks on input+output;
   DeepEval bias/toxicity metrics; persona constrained to professional/portfolio scope; declines
   personal/sensitive or discriminatory requests.
-- **Privacy / PII** — no persistence of raw user messages by default; Langfuse configured to
-  mask/avoid PII (or self-hosted); rate limiting + input length caps; secrets only via Vercel env
-  vars, never baked into images/builds.
+- **Privacy / PII** — no persistence of raw user messages by default; OTel GenAI message-content
+  capture left **off** by default (`OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT=false`), so
+  prompt/completion text is not sent to App Insights unless explicitly enabled; rate limiting +
+  input length caps; secrets only via Vercel env vars, never baked into images/builds.
 - **Transparency** — UI labels it an AI persona of Haruka, not Haruka.
 
-## Observability (Langfuse)
+## Observability (OpenTelemetry → Azure Monitor / Application Insights)
 
-- `backend/app/observability.py` — Langfuse client + `@observe`-style spans for `retrieve`,
-  `build_prompt`, `chat_completion`; captures model, tokens, cost, latency, retrieved chunk ids,
-  safety verdicts, and citations.
-- Self-host via Docker or use the cloud free tier; config via `LANGFUSE_HOST` / `LANGFUSE_PUBLIC_KEY`
-  / `LANGFUSE_SECRET_KEY`.
-- The `llm/` eval jobs push scores/datasets to the same Langfuse project, correlating offline eval
-  with production traces.
+OpenTelemetry is the instrumentation/transport layer only; **Application Insights** is the backing
+store + UI (queried with KQL). No separate observability service to run.
+
+- `backend/app/observability.py` — calls `configure_azure_monitor()` (the `azure-monitor-opentelemetry`
+  distro) once in the FastAPI lifespan, then instruments the OpenAI SDK
+  (`opentelemetry-instrumentation-openai-v2`, GenAI semantic conventions) and FastAPI. Exposes a
+  `tracer` for manual spans around `retrieve`, `build_prompt`, `chat_completion`; the OpenAI
+  instrumentation auto-captures model, token usage, and latency, and manual spans add retrieved
+  chunk ids, safety verdicts, and citations.
+- Config via a single `APPLICATIONINSIGHTS_CONNECTION_STRING` (from the App Insights resource);
+  `OTEL_SERVICE_NAME` names the service. Prompt/completion text capture is off by default
+  (`OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT`).
+- **Gaps vs a purpose-built LLM tool (handled deliberately):** (1) dollar **cost** is not
+  auto-computed — derive it from `gen_ai.usage.*` token counts via a KQL query or a `cost` span
+  attribute from a price map; (2) there is no first-class **eval-score** object — the `llm/` eval
+  jobs emit RAGAS/DeepEval scores as App Insights **custom events/metrics** tagged with `trace_id`,
+  so offline eval can still be joined to production traces in KQL.
 
 ## Evaluation (RAGAS + DeepEval)
 
@@ -232,24 +243,25 @@ AZURE_OPENAI_CHAT_DEPLOYMENT=   AZURE_OPENAI_EMBEDDING_DEPLOYMENT=
 AZURE_OPENAI_API_VERSION=
 AZURE_SEARCH_ENDPOINT=          AZURE_SEARCH_API_KEY=        AZURE_SEARCH_INDEX=
 AZURE_CONTENT_SAFETY_ENDPOINT=  AZURE_CONTENT_SAFETY_KEY=
-LANGFUSE_HOST=  LANGFUSE_PUBLIC_KEY=  LANGFUSE_SECRET_KEY=
+APPLICATIONINSIGHTS_CONNECTION_STRING=  OTEL_SERVICE_NAME=
 ```
 
-Azure OpenAI deployments, Azure AI Search, and Content Safety are provisioned by hand via `az` /
-AI Foundry. Keys are stored as Vercel environment variables (backend project) and in local `.env`
-files for development. The `llm/` pipeline reads the same values from its own `.env` / CI secrets.
+Azure OpenAI deployments, Azure AI Search, Content Safety, and the Application Insights resource are
+provisioned by hand via `az` / the Azure portal. Keys/connection strings are stored as Vercel
+environment variables (backend project) and in local `.env` files for development. The `llm/`
+pipeline reads the same values from its own `.env` / CI secrets.
 
 ## Phased implementation
 
 1. **Doc** — this file.
 2. **`llm/` scaffold + ingestion + chunking** (offline, testable without Azure).
 3. **Azure resources** — Azure OpenAI chat+embedding deployments, Azure AI Search, Content Safety,
-   Langfuse (provisioned via `az`/Foundry).
+   Application Insights (provisioned via `az`/portal).
 4. **`llm/` embed + index build** — `build.py` populates Azure AI Search.
-5. **Backend** — adapters + `rag_service` + `/chat` SSE + Langfuse tracing.
+5. **Backend** — adapters + `rag_service` + `/chat` SSE + OTel/Azure Monitor tracing.
 6. **Frontend** — chat widget with streaming + citations, mounted globally.
 7. **Safety hardening** — Prompt Shields + Content Safety wired and tested.
-8. **Eval harness** — RAGAS + DeepEval + red-team, with thresholds; scores to Langfuse.
+8. **Eval harness** — RAGAS + DeepEval + red-team, with thresholds; scores to App Insights custom events.
 9. **Deploy** — env vars on Vercel; confirm SSE behavior (fallback if buffered); update docs;
    optional scheduled GitHub Action for the index build.
 
@@ -261,7 +273,8 @@ files for development. The `llm/` pipeline reads the same values from its own `.
   `repo_url = https://github.com/uc-vision/apple-thinning`.
 - **Backend (local)** — `uv run uvicorn app.main:app --reload`; `curl -N` `POST /chat` with the
   VR-game question → streamed grounded answer + repo citation; a navigation question → suggests
-  `/journal` or `/experience`; the turn appears as a Langfuse trace with tokens/cost.
+  `/journal` or `/experience`; the turn appears as a distributed trace in Application Insights with
+  token usage (Transaction search / Application map).
 - **Backend (Vercel)** — deploy a preview and `curl -N` the deployed `/chat` to confirm SSE is not
   buffered; apply the fallback if it is.
 - **Safety** — a prompt-injection/jailbreak attempt is blocked with a safe refusal; off-scope or
@@ -269,6 +282,6 @@ files for development. The `llm/` pipeline reads the same values from its own `.
 - **Frontend** — `bun run dev`; the widget floats on every page; example questions stream an answer
   with clickable citations; works in light + dark.
 - **Eval gate** — `uv run pytest` (DeepEval) passes thresholds; `ragas_eval.py` reports metrics
-  above thresholds and scores appear in Langfuse.
+  above thresholds and scores appear as custom events in Application Insights.
 - **Full stack** — `docker compose up` → widget on `localhost:3000` talks to the backend on `:8000`
   end to end.

@@ -11,7 +11,8 @@ dependencies = [
     "azure-search-documents>=11.5",
     "tiktoken>=0.8",
     "tenacity>=9.0",
-    "langfuse>=2.50",
+    "azure-monitor-opentelemetry>=1.6",
+    "opentelemetry-instrumentation-openai-v2>=2.0",
 ]
 
 # Heavy evaluation dependencies are optional so the core ingest/index pipeline stays lean.

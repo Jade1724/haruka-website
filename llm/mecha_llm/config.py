@@ -37,10 +37,9 @@ class Settings(BaseSettings):
     chunk_max_tokens: int = 400
     chunk_overlap_tokens: int = 60
 
-    # --- Langfuse ---
-    langfuse_host: str = "https://cloud.langfuse.com"
-    langfuse_public_key: str = ""
-    langfuse_secret_key: str = ""
+    # --- Observability (OpenTelemetry -> Azure Monitor / Application Insights) ---
+    applicationinsights_connection_string: str = ""
+    otel_service_name: str = "mecha-haruka"
 
     def require(self, *fields: str) -> None:
         """Raise if any named setting is empty — call before a stage that needs it."""
