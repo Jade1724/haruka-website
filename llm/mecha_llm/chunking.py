@@ -144,7 +144,7 @@ def chunk_document(
             text = f"{prefix}\n\n{piece}" if prefix else piece
             chunks.append(
                 Chunk(
-                    chunk_id=f"{doc.doc_id}::{index}",
+                    chunk_id=f"{doc.doc_id}_{index}",
                     doc_id=doc.doc_id,
                     chunk_index=index,
                     text=text,

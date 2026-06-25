@@ -34,7 +34,7 @@ class SourceDoc:
 
 @dataclass(frozen=True)
 class Chunk:
-    chunk_id: str  # f"{doc_id}::{chunk_index}"
+    chunk_id: str  # f"{doc_id}_{chunk_index}" (Azure Search keys allow only [A-Za-z0-9_\-=])
     doc_id: str
     chunk_index: int
     text: str
