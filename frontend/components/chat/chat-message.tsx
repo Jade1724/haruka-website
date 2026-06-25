@@ -5,7 +5,7 @@ import { cn } from "@/lib/utils";
 import type { ChatMessage, Citation } from "./use-chat";
 
 const chipClass =
-  "inline-flex items-center gap-1 border border-border bg-background px-1.5 py-0.5 text-[10px] text-muted-foreground transition-colors hover:text-foreground";
+  "inline-flex items-center gap-1 border border-border bg-background px-2 py-1 text-xs text-muted-foreground transition-colors hover:text-foreground";
 
 function CitationChips({ citation }: { citation: Citation }) {
   const isInternal = citation.url.startsWith("/");
@@ -49,7 +49,7 @@ export function ChatMessageBubble({ message }: { message: ChatMessage }) {
     <div className={cn("flex flex-col gap-1.5", isUser ? "items-end" : "items-start")}>
       <div
         className={cn(
-          "max-w-[85%] border px-3 py-2 text-xs leading-relaxed whitespace-pre-wrap",
+          "max-w-[85%] border px-3 py-2 text-sm leading-relaxed whitespace-pre-wrap",
           isUser
             ? "border-transparent bg-primary text-primary-foreground"
             : "border-border bg-muted text-foreground"
