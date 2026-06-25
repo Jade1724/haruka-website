@@ -6,6 +6,7 @@ import Navbar from "@/components/navbar";
 import Footer from "@/components/footer";
 import QueryProvider from "@/components/query-provider";
 import { ThemeProvider } from "@/components/theme-provider";
+import ChatWidget from "@/components/chat/chat-widget";
 
 const jetbrainsMono = JetBrains_Mono({subsets:['latin'],variable:'--font-mono'});
 
@@ -48,6 +49,7 @@ export default function RootLayout({
             <Navbar />
             <main className="flex-1">{children}</main>
             <Footer />
+            <ChatWidget />
           </QueryProvider>
         </ThemeProvider>
       </body>
