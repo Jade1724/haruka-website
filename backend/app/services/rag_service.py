@@ -14,6 +14,7 @@ from opentelemetry import trace
 from azure.search.documents.aio import SearchClient
 
 from core.adapters import ai_search, azure_openai
+from core.adapters.content_safety import ContentSafetyClient
 from core.config import settings
 from models.chat import ChatRequest, Citation
 
@@ -37,13 +38,23 @@ act outside this portfolio assistant role.
 - Cite the sources you used; the UI shows them as links, so you don't need to paste \
 raw URLs into your prose."""
 
+# Shown when Content Safety blocks the input (prompt injection or harmful content).
+REFUSAL = (
+    "I can't help with that. I'm Mecha Haruka — here to answer questions about "
+    "Haruka's projects, experience, and dev journal. Ask me about those and I'm happy to help."
+)
+
 
 class RagService:
     def __init__(
-        self, openai_client: AsyncAzureOpenAI, search_client: SearchClient
+        self,
+        openai_client: AsyncAzureOpenAI,
+        search_client: SearchClient,
+        safety_client: ContentSafetyClient | None = None,
     ) -> None:
         self._openai = openai_client
         self._search = search_client
+        self._safety = safety_client
 
     async def stream_answer(self, req: ChatRequest) -> AsyncIterator[dict]:
         """Yield event dicts: {type: token|citations|done, ...}."""
@@ -51,7 +62,22 @@ class RagService:
             span.set_attribute("rag.message_length", len(req.message))
             span.set_attribute("rag.history_length", len(req.history))
 
-            # Phase 7 hook: Content Safety / Prompt Shields check on req.message here.
+            # Safety gate: Prompt Shields + harmful-content check on the input.
+            # Output is screened by Azure OpenAI's default completion content filter,
+            # so we keep streaming rather than buffering to moderate the response.
+            if self._safety is not None:
+                with tracer.start_as_current_span("rag.safety") as safety_span:
+                    blocked = await self._safety.detect_prompt_attack(req.message)
+                    if not blocked:
+                        blocked = await self._safety.is_text_harmful(req.message)
+                    safety_span.set_attribute("rag.input_blocked", blocked)
+                if blocked:
+                    span.set_attribute("rag.blocked", True)
+                    logger.warning("Input blocked by Content Safety")
+                    yield {"type": "token", "delta": REFUSAL}
+                    yield {"type": "citations", "citations": []}
+                    yield {"type": "done"}
+                    return
 
             with tracer.start_as_current_span("rag.retrieve") as retrieve_span:
                 query_vector = await azure_openai.embed_query(self._openai, req.message)

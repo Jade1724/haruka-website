@@ -17,4 +17,5 @@ def get_rag_service(request: Request) -> RagService:
         raise HTTPException(
             status_code=503, detail="Chat is not configured on this deployment."
         )
-    return RagService(openai_client, search_client)
+    # Content Safety is optional; None when not configured.
+    return RagService(openai_client, search_client, request.app.state.content_safety_client)

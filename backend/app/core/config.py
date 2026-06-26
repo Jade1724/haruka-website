@@ -22,6 +22,9 @@ class Settings(BaseSettings):
 
     allowed_origins: str = "http://localhost:3000"
 
+    # Log verbosity: DEBUG | INFO | WARNING | ERROR. DEBUG also un-mutes SDK logs.
+    log_level: str = "INFO"
+
     # --- Azure OpenAI (chat + embeddings) ---
     azure_openai_endpoint: str = ""
     azure_openai_api_key: str = ""
@@ -36,6 +39,11 @@ class Settings(BaseSettings):
     azure_search_index: str = "mecha-haruka"
     rag_top_k: int = 5
 
+    # --- Azure AI Content Safety (Prompt Shields + harmful-content checks) ---
+    azure_content_safety_endpoint: str = ""
+    azure_content_safety_key: str = ""
+    content_safety_threshold: int = 4  # severity levels 0/2/4/6; block >= threshold
+
     # --- Observability (OpenTelemetry -> Azure Monitor / Application Insights) ---
     applicationinsights_connection_string: str = ""
     otel_service_name: str = "mecha-haruka-backend"
@@ -49,6 +57,11 @@ class Settings(BaseSettings):
             and self.azure_search_endpoint
             and self.azure_search_api_key
         )
+
+    @property
+    def safety_configured(self) -> bool:
+        """True when Azure AI Content Safety is configured (optional; chat runs without it)."""
+        return bool(self.azure_content_safety_endpoint and self.azure_content_safety_key)
 
 
 settings = Settings()
