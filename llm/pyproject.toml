@@ -21,6 +21,10 @@ dependencies = [
 eval = [
     "ragas>=0.2",
     "deepeval>=1.4",
+    # RAGAS 0.4 targets the langchain 0.3 line; langchain 1.x moves modules it imports.
+    "langchain>=0.3,<1.0",
+    "langchain-community>=0.3,<1.0",
+    "langchain-openai>=0.2,<1.0",
     "pytest>=8.3",
     "pytest-asyncio>=0.24",
 ]
