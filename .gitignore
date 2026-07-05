@@ -122,3 +122,11 @@ __pycache__/
 *.tfstate.*
 .terraform/
 *.tfvars
+
+### LLM (mecha-haruka RAG pipeline + eval) ###
+llm/.venv/
+.pytest_cache/
+.ragas/
+.deepeval/
+*.egg-info/
+dist/

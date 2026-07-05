@@ -1,0 +1,96 @@
+"""RAGAS evaluation over the golden set, gated on thresholds.
+
+Metrics: faithfulness, answer relevancy, context precision, context recall.
+Judge LLM + embeddings are Azure OpenAI. Prints a per-metric report, writes
+``eval_results.json``, and exits non-zero if any metric is below threshold (so
+it works as a CI quality gate).
+
+Run:  uv run python -m mecha_llm.eval.ragas_eval
+"""
+
+from __future__ import annotations
+
+import asyncio
+import json
+import logging
+import sys
+
+from ragas import EvaluationDataset, evaluate
+from ragas.metrics import (
+    Faithfulness,
+    LLMContextPrecisionWithReference,
+    LLMContextRecall,
+    ResponseRelevancy,
+)
+
+from ._models import ragas_embeddings, ragas_llm
+from .dataset import GOLDEN
+from .rag import answer_all
+
+logger = logging.getLogger("mecha_llm.eval.ragas")
+
+# Minimum acceptable mean score per metric (keyed by the metric's `.name`).
+THRESHOLDS = {
+    "faithfulness": 0.70,
+    "answer_relevancy": 0.70,
+    "llm_context_precision_with_reference": 0.60,
+    "context_recall": 0.60,
+}
+DEFAULT_THRESHOLD = 0.60
+
+
+def _build_dataset(results, golden) -> EvaluationDataset:
+    return EvaluationDataset.from_list(
+        [
+            {
+                "user_input": g.question,
+                "response": r.answer,
+                "retrieved_contexts": r.contexts,
+                "reference": g.reference,
+            }
+            for g, r in zip(golden, results)
+        ]
+    )
+
+
+def main() -> None:
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+
+    logger.info("Running RAG over %d golden questions…", len(GOLDEN))
+    results = asyncio.run(answer_all([g.question for g in GOLDEN]))
+
+    dataset = _build_dataset(results, GOLDEN)
+    metrics = [
+        Faithfulness(),
+        ResponseRelevancy(),
+        LLMContextPrecisionWithReference(),
+        LLMContextRecall(),
+    ]
+
+    logger.info("Scoring with RAGAS (Azure OpenAI judge)…")
+    scores = evaluate(dataset, metrics=metrics, llm=ragas_llm(), embeddings=ragas_embeddings())
+    df = scores.to_pandas()
+
+    summary = {m.name: float(df[m.name].mean()) for m in metrics if m.name in df.columns}
+
+    print("\n=== RAGAS scores ===")
+    failed: list[str] = []
+    for name, value in summary.items():
+        threshold = THRESHOLDS.get(name, DEFAULT_THRESHOLD)
+        ok = value >= threshold
+        print(f"  {'PASS' if ok else 'FAIL'}  {name:<40} {value:.3f}  (>= {threshold})")
+        if not ok:
+            failed.append(name)
+
+    with open("eval_results.json", "w", encoding="utf-8") as fh:
+        json.dump(summary, fh, indent=2)
+    logger.info("Wrote eval_results.json")
+
+    if failed:
+        print(f"\n❌ Below threshold: {', '.join(failed)}")
+        sys.exit(1)
+    print("\n✅ All RAGAS metrics passed thresholds.")
+
+
+if __name__ == "__main__":
+    main()

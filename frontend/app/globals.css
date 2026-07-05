@@ -128,3 +128,30 @@
     @apply font-mono;
   }
 }
+
+/* A single playful hop — used by the floating chat launcher's robot icon. */
+@keyframes jump {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  30% {
+    transform: translateY(-30%);
+  }
+  55% {
+    transform: translateY(0);
+  }
+  75% {
+    transform: translateY(-12%);
+  }
+}
+
+@utility animate-jump {
+  animation: jump 0.6s ease-in-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-jump {
+    animation: none;
+  }
+}

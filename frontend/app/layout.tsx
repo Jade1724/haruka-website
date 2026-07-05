@@ -6,6 +6,7 @@ import Navbar from "@/components/navbar";
 import Footer from "@/components/footer";
 import QueryProvider from "@/components/query-provider";
 import { ThemeProvider } from "@/components/theme-provider";
+import ChatWidget from "@/components/chat/chat-widget";
 
 const jetbrainsMono = JetBrains_Mono({subsets:['latin'],variable:'--font-mono'});
 
@@ -23,6 +24,10 @@ export const metadata: Metadata = {
   title: "Haruka",
   description: "Haruka's portfolio — projects, experience, and dev journal",
 };
+
+// Off by default: running the RAG chatbot costs money (Azure OpenAI + AI
+// Search). Set NEXT_PUBLIC_CHAT_ENABLED=true to render the widget.
+const chatEnabled = process.env.NEXT_PUBLIC_CHAT_ENABLED === "true";
 
 export default function RootLayout({
   children,
@@ -48,6 +53,7 @@ export default function RootLayout({
             <Navbar />
             <main className="flex-1">{children}</main>
             <Footer />
+            {chatEnabled && <ChatWidget />}
           </QueryProvider>
         </ThemeProvider>
       </body>
