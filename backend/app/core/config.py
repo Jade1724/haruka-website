@@ -25,6 +25,12 @@ class Settings(BaseSettings):
     # Log verbosity: DEBUG | INFO | WARNING | ERROR. DEBUG also un-mutes SDK logs.
     log_level: str = "INFO"
 
+    # --- RAG chatbot (mecha-haruka) feature flag ---
+    # Off by default: running the chatbot costs money (Azure OpenAI + AI Search).
+    # Must be explicitly set to true to enable /chat, even if Azure creds below
+    # are present.
+    chat_enabled: bool = False
+
     # --- Azure OpenAI (chat + embeddings) ---
     azure_openai_endpoint: str = ""
     azure_openai_api_key: str = ""
@@ -50,9 +56,10 @@ class Settings(BaseSettings):
 
     @property
     def chat_configured(self) -> bool:
-        """True when the Azure OpenAI + AI Search settings needed for /chat exist."""
+        """True when chat is explicitly enabled and its Azure settings exist."""
         return bool(
-            self.azure_openai_endpoint
+            self.chat_enabled
+            and self.azure_openai_endpoint
             and self.azure_openai_api_key
             and self.azure_search_endpoint
             and self.azure_search_api_key
