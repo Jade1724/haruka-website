@@ -174,6 +174,23 @@ the Azure pipeline ignores the Vercel files.
 - Backend: Serverless functions in `backend/` directory
 - Environment variables for API keys and database connections
 
+#### Manual Production Deploy
+
+Frontend and backend are separate Vercel projects (each has its own `.vercel/project.json`), so
+deploy each from its own directory:
+
+```bash
+# Frontend
+cd frontend
+vercel --prod
+
+# Backend
+cd backend
+vercel --prod
+```
+
+Requires the [Vercel CLI](https://vercel.com/docs/cli) installed and logged in (`vercel login`).
+
 ### Azure / AKS Configuration (dormant)
 - Infrastructure provisioned via Terraform in `infra/`
 - Workloads defined as Kubernetes manifests in `k8s/`
