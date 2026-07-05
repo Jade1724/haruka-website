@@ -50,14 +50,6 @@ def _slug_to_title(slug: str) -> str:
     return slug.replace("-", " ").title()
 
 
-def _extract_title(content: str) -> str:
-    for line in content.splitlines():
-        stripped = line.strip()
-        if stripped.startswith("# "):
-            return stripped[2:].strip()
-    return ""
-
-
 class JournalService:
     def __init__(self, dao: GithubDAO) -> None:
         self._dao = dao
@@ -155,7 +147,7 @@ class JournalService:
         year, month, day, slug = target_parsed
         detail = JournalDetail(
             id=journal_id,
-            title=_extract_title(content) or _slug_to_title(slug),
+            title=_slug_to_title(slug),
             published_on=date(year, month, day),
             updated_on=updated_on,
             content=content,
