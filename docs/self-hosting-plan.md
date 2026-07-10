@@ -4,9 +4,11 @@
 
 Azure AI Search is the expensive piece of the mecha-haruka RAG chatbot. This plan
 replaces it — and the rest of the paid hosting — with a self-hosted stack on an
-8GB Raspberry Pi 5: frontend, backend, PostgreSQL + pgvector, and a local
-embedding model, all behind a single Cloudflare Tunnel. Azure OpenAI stays only
-for chat generation (a local LLM on an 8GB Pi is not practical; revisit later).
+8GB Raspberry Pi 5: frontend, backend, and a local embedding model, all behind a
+single Cloudflare Tunnel. PostgreSQL + pgvector runs on Neon (free tier) instead
+of on the Pi, to leave RAM headroom on the 8GB board for the app processes and
+the embedding model. Azure OpenAI stays only for chat generation (a local LLM on
+an 8GB Pi is not practical; revisit later).
 
 This is deliberately a **learning project**. Each phase lists what you'll learn,
 the work involved, and a checkpoint to verify before moving on. The centerpiece
@@ -14,17 +16,27 @@ is **implementing HNSW from scratch** and eventually serving real queries with i
 
 ## Decisions
 
-1. **Hosting shape**: everything on the Pi behind one Cloudflare Tunnel. Zero
-   hosting cost; all services talk over localhost. Tradeoff: site availability
-   depends on home power/internet.
-2. **Embeddings**: local `BAAI/bge-small-en-v1.5` (384 dims) via
+1. **Hosting shape**: frontend + backend on the Pi behind one Cloudflare Tunnel.
+   Zero hosting cost for the app tier. Tradeoff: site availability depends on
+   home power/internet.
+2. **Database**: PostgreSQL + pgvector on Neon (free tier) rather than on the
+   Pi. An 8GB Pi has little headroom once you add the app processes and the
+   embedding model, and pgvector's HNSW index *builds* spike well above the
+   steady-state RSS in the table below — offloading Postgres removes that risk.
+   Neon runs real pgvector, so the Phase 1 learning goals (vector column type,
+   distance operators, HNSW index limits) are unaffected; the from-scratch HNSW
+   work in Phase 6 is pure Python/numpy and reads vectors out of Postgres
+   regardless of where it's hosted, so it's unaffected too. Tradeoff: hybrid
+   search queries round-trip over the internet instead of localhost, and the
+   free tier autosuspends idle compute and caps storage/compute-hours.
+3. **Embeddings**: local `BAAI/bge-small-en-v1.5` (384 dims) via
    sentence-transformers, replacing `text-embedding-3-large` (3072 dims — which
    exceeds pgvector's 2000-dim HNSW index limit anyway). Full corpus re-embed
    required; the corpus is small, so this takes minutes.
-3. **HNSW scope**: build in pure Python inside `llm/` with tests and benchmarks
+4. **HNSW scope**: build in pure Python inside `llm/` with tests and benchmarks
    (recall vs brute force, vs pgvector's HNSW), then wire it into the serving
    path for real behind a `VECTOR_BACKEND=hnsw_scratch|pgvector` config flag.
-4. **Generation**: stays on Azure OpenAI (`gpt-4o`). Only retrieval and
+5. **Generation**: stays on Azure OpenAI (`gpt-4o`). Only retrieval and
    embeddings move.
 
 ## Current architecture (what's being replaced)
@@ -44,14 +56,16 @@ is **implementing HNSW from scratch** and eventually serving real queries with i
 
 ## RAM budget (8GB Pi 5)
 
+Postgres runs on Neon, not the Pi, so it's off this table — the point of that
+choice is to keep the Pi's budget comfortably clear of the app tier alone.
+
 | Service                        | Approx. RSS |
 | ------------------------------ | ----------- |
-| PostgreSQL + pgvector          | 300–500 MB  |
 | FastAPI backend                | ~150 MB     |
 | bge-small embedding model      | 300–400 MB  |
 | Next.js production server      | 300–500 MB  |
 | cloudflared                    | ~50 MB      |
-| **Total**                      | **< 3 GB**  |
+| **Total**                      | **< 1.5 GB**|
 
 ---
 
@@ -69,21 +83,25 @@ is **implementing HNSW from scratch** and eventually serving real queries with i
 
 **Checkpoint**: `docker run --rm hello-world` works over SSH; reboot survives.
 
-## Phase 1 — PostgreSQL + pgvector
+## Phase 1 — PostgreSQL + pgvector (Neon)
 
-**Goal**: a vector-capable Postgres running on the Pi.
+**Goal**: a vector-capable Postgres reachable from both the laptop and the Pi.
 
 **What you'll learn**: the `vector` column type, distance operators (`<=>`
 cosine, `<->` L2, `<#>` negative inner product), why normalized embeddings make
 cosine equivalent to inner product, and pgvector's 2000-dim HNSW index limit.
 
-- Compose service from `pgvector/pgvector:pg17` (arm64 image), volume-backed.
+- Create a Neon project (free tier); enable the `vector` extension
+  (`CREATE EXTENSION vector;`) on the default branch.
 - Create the `chunks` table mirroring the Azure index schema
   (`llm/mecha_llm/documents.py`): `id`, `doc_id`, `chunk_index`, `content`,
   `title`, `source_type`, `url`, `repo_url`, `published_on`,
   `embedding vector(384)`, plus a generated `tsvector` column over
   `title + content` with a GIN index for the keyword leg of hybrid search.
 - Add the pgvector HNSW index (`USING hnsw (embedding vector_cosine_ops)`).
+- `DATABASE_URL` (Neon's pooled connection string) becomes a secret the backend
+  reads from both the laptop (dev) and the Pi (prod) — no Postgres container in
+  the Pi compose stack.
 
 **Checkpoint**: `SELECT '[1,2,3]'::vector(3) <=> '[3,2,1]'::vector(3);` returns
 a distance from `psql`.
@@ -135,7 +153,7 @@ what is lost without it.
 - Rewire `main.py` app state + `factory.py`; update `config.py`
   (`database_url`, `chat_configured` no longer gates on Azure Search creds).
 
-**Checkpoint**: run backend locally against the Pi's DB; `/chat` answers with
+**Checkpoint**: run backend locally against Neon; `/chat` answers with
 correct citations. Run the `llm/mecha_llm/eval/` RAGAS suite and compare
 retrieval metrics against the Azure baseline (record the baseline **before**
 tearing anything down).
@@ -148,7 +166,8 @@ tearing anything down).
 zero-open-port ingress via tunnels, deploying without a PaaS.
 
 - Dockerfiles: Next.js (standalone) + FastAPI, built for arm64.
-- Compose stack: `frontend`, `backend`, `postgres`, `cloudflared`.
+- Compose stack: `frontend`, `backend`, `cloudflared` (no `postgres` service —
+  the backend reaches Neon over the internet via `DATABASE_URL`).
 - Cloudflare Tunnel: move the domain's DNS to Cloudflare, create a tunnel,
   public hostnames for the site and API routed to the local containers.
 - Secrets via an env file on the Pi; restart policies; a simple `deploy.sh`
@@ -211,7 +230,8 @@ exact search, and the eval suite shows no quality regression vs pgvector.
 | Azure AI Search      | ~basic tier $$            | $0                        |
 | Embeddings           | per-token (small)         | $0 (local)                |
 | Chat generation      | per-token                 | per-token (unchanged)     |
-| Hosting              | Vercel free tier          | $0 + Pi power (~2–5 W)    |
+| Hosting (app tier)   | Vercel free tier          | $0 + Pi power (~2–5 W)    |
+| Database             | —                         | $0 (Neon free tier)       |
 | Cloudflare Tunnel    | —                         | $0 (free plan)            |
 
 ## Suggested order of work
