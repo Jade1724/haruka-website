@@ -56,8 +56,9 @@ is **implementing HNSW from scratch** and eventually serving real queries with i
 
 ## RAM budget (8GB Pi 5)
 
-Postgres runs on Neon, not the Pi, so it's off this table — the point of that
-choice is to keep the Pi's budget comfortably clear of the app tier alone.
+Postgres starts on the Pi (see Phase 1); Neon is the pressure valve if memory
+gets tight once the app tier lands in Phase 2+. Watch `free -h` and
+`docker stats` as services are added.
 
 | Service                        | Approx. RSS |
 | ------------------------------ | ----------- |
@@ -65,7 +66,8 @@ choice is to keep the Pi's budget comfortably clear of the app tier alone.
 | bge-small embedding model      | 300–400 MB  |
 | Next.js production server      | 300–500 MB  |
 | cloudflared                    | ~50 MB      |
-| **Total**                      | **< 1.5 GB**|
+| Postgres + pgvector (Pi phase) | 100–200 MB steady; capped at 1 GB (`mem_limit`) — HNSW builds spike |
+| **Total**                      | **< 2.5 GB**|
 
 ---
 
@@ -83,28 +85,40 @@ choice is to keep the Pi's budget comfortably clear of the app tier alone.
 
 **Checkpoint**: `docker run --rm hello-world` works over SSH; reboot survives.
 
-## Phase 1 — PostgreSQL + pgvector (Neon)
+## Phase 1 — PostgreSQL + pgvector (on the Pi; Neon as pressure valve)
 
 **Goal**: a vector-capable Postgres reachable from both the laptop and the Pi.
 
-**What you'll learn**: the `vector` column type, distance operators (`<=>`
-cosine, `<->` L2, `<#>` negative inner product), why normalized embeddings make
+**What you'll learn**: running Postgres in Docker (volumes, persistence,
+memory caps), the `vector` column type, distance operators (`<=>` cosine,
+`<->` L2, `<#>` negative inner product), why normalized embeddings make
 cosine equivalent to inner product, and pgvector's 2000-dim HNSW index limit.
 
-- Create a Neon project (free tier); enable the `vector` extension
-  (`CREATE EXTENSION vector;`) on the default branch.
+**Decision (2026-07-12)**: start with Postgres on the Pi rather than Neon.
+The chunks data is derived (rebuilt by the ingestion pipeline), so moving to
+Neon later is a `DATABASE_URL` swap + re-run of ingestion — not a real
+migration. Running it on the Pi adds sysadmin learning; if RAM gets tight
+once the embedding model and app containers land (Phase 2+), evict to Neon
+then. Watch `free -h` / `docker stats` at each phase.
+
+- Run `pgvector/pgvector` (arm64) via Docker Compose on the Pi: named volume
+  for `/var/lib/postgresql/data`, `mem_limit: 1g`, conservative
+  `maintenance_work_mem` (HNSW index builds spike well above steady-state).
+  Expose 5432 to the LAN only (ufw already default-denies; allow laptop access).
+- Enable the `vector` extension (`CREATE EXTENSION vector;`).
 - Create the `chunks` table mirroring the Azure index schema
   (`llm/mecha_llm/documents.py`): `id`, `doc_id`, `chunk_index`, `content`,
   `title`, `source_type`, `url`, `repo_url`, `published_on`,
   `embedding vector(384)`, plus a generated `tsvector` column over
   `title + content` with a GIN index for the keyword leg of hybrid search.
 - Add the pgvector HNSW index (`USING hnsw (embedding vector_cosine_ops)`).
-- `DATABASE_URL` (Neon's pooled connection string) becomes a secret the backend
-  reads from both the laptop (dev) and the Pi (prod) — no Postgres container in
-  the Pi compose stack.
+- `DATABASE_URL` points at the Pi (LAN address from the laptop,
+  `localhost`/service name on the Pi). If/when evicting to Neon: create the
+  project, run the same DDL, swap `DATABASE_URL`, re-run ingestion.
 
 **Checkpoint**: `SELECT '[1,2,3]'::vector(3) <=> '[3,2,1]'::vector(3);` returns
-a distance from `psql`.
+a distance from `psql` on the laptop, pointed at the Pi; data survives
+`docker compose down && up` and a Pi reboot.
 
 ## Phase 2 — Local embeddings
 
