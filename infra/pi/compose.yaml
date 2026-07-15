@@ -1,0 +1,22 @@
+name: mechaharuka
+services:
+  postgres:
+    image: pgvector/pgvector:0.8.5-pg18-trixie
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: mechaharuka
+      POSTGRES_DB: mechaharuka
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    command: postgres -c shared_buffers=256MB -c maintenance_work_mem=256MB
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql
+    mem_limit: 1g
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mechaharuka -d mechaharuka"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+volumes:
+  pgdata:
