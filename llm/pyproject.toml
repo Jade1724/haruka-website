@@ -33,6 +33,7 @@ eval = [
 dev = [
     "pytest>=8.3",
     "pytest-asyncio>=0.24",
+    "sqlfluff>=3.0",
 ]
 
 [tool.pytest.ini_options]

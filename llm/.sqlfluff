@@ -1,0 +1,14 @@
+[sqlfluff]
+dialect = postgres
+max_line_length = 100
+# RF04: `content` is not reserved in Postgres and mirrors the Azure index schema.
+# PG01: CREATE INDEX CONCURRENTLY is for live tables; this is bootstrap DDL on an
+#       empty table and CONCURRENTLY cannot run inside a transaction block.
+exclude_rules = RF04, PG01
+
+[sqlfluff:indentation]
+tab_space_size = 4
+indent_unit = space
+
+[sqlfluff:rules:capitalisation.keywords]
+capitalisation_policy = upper
