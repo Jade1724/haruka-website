@@ -85,7 +85,7 @@ gets tight once the app tier lands in Phase 2+. Watch `free -h` and
 
 **Checkpoint**: `docker run --rm hello-world` works over SSH; reboot survives.
 
-## Phase 1 — PostgreSQL + pgvector (on the Pi; Neon as pressure valve)
+## Phase 1 — PostgreSQL + pgvector (on the Pi; Neon as pressure valve) ✅ DONE (2026-07-19)
 
 **Goal**: a vector-capable Postgres reachable from both the laptop and the Pi.
 
@@ -116,9 +116,11 @@ then. Watch `free -h` / `docker stats` at each phase.
   `localhost`/service name on the Pi). If/when evicting to Neon: create the
   project, run the same DDL, swap `DATABASE_URL`, re-run ingestion.
 
-**Checkpoint**: `SELECT '[1,2,3]'::vector(3) <=> '[3,2,1]'::vector(3);` returns
+**Checkpoint** ✅: `SELECT '[1,2,3]'::vector(3) <=> '[3,2,1]'::vector(3);` returns
 a distance from `psql` on the laptop, pointed at the Pi; data survives
-`docker compose down && up` and a Pi reboot.
+`docker compose down && up` and a Pi reboot. Verified 2026-07-19 — cosine
+distance query ran from the Mac over LAN; `chunks` survived container
+recreate and a full Pi reboot.
 
 ## Phase 2 — Local embeddings
 
