@@ -20,7 +20,7 @@ import logging
 from .chunking import chunk_documents
 from .config import settings
 from .documents import SourceDoc
-from .embeddings import embed_chunks
+from .embeddings_provider import embed_chunks
 from .index import ensure_index, upsert_chunks
 from .sources.content_json import load_content_docs
 from .sources.journals import fetch_journal_docs
