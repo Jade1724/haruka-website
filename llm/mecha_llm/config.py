@@ -48,6 +48,9 @@ class Settings(BaseSettings):
     applicationinsights_connection_string: str = ""
     otel_service_name: str = "mecha-haruka"
 
+    # --- Self-hosting pgvector config ---
+    database_url: str = ""
+
     def require(self, *fields: str) -> None:
         """Raise if any named setting is empty — call before a stage that needs it."""
         missing = [f for f in fields if not getattr(self, f)]
