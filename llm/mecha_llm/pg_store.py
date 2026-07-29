@@ -67,7 +67,7 @@ async def upsert_chunks(
 
     cols = ", ".join(_COLUMNS)
     placeholders = ", ".join(f"${i}" for i in range(1, len(_COLUMNS) + 1))
-    updates = ", ".join(f"{c} = EXCLUDE.{c}" for c in _COLUMNS if c != "id")
+    updates = ", ".join(f"{c} = EXCLUDED.{c}" for c in _COLUMNS if c != "id")
     sql = (
         f"INSERT INTO chunks ({cols}) VALUES ({placeholders}) "
         f"ON CONFLICT (id) DO UPDATE SET {updates}"
