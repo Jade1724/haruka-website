@@ -68,7 +68,7 @@ async def build(*, dry_run: bool = False, skip_journals: bool = False) -> None:
     logger.info("Embedded %d chunks (%d dims).", len(embedded), settings.embedding_dimensions)
 
     await ensure_schema()
-    logger.info("Ensured index %r is up to date.", settings.azure_search_index)
+    logger.info("Ensured pgvector schema is up to date.")
 
     uploaded = await upsert_chunks(embedded)
     logger.info("Upserted %d/%d chunks into Postgres/pgvector.", uploaded, len(embedded))
