@@ -13,4 +13,7 @@ dependencies = [
     "azure-monitor-opentelemetry>=1.6",
     "opentelemetry-instrumentation-openai-v2>=2.0",
     "opentelemetry-instrumentation-fastapi>=0.49b0",
+    "asyncpg>=0.31.0",
+    "pgvector>=0.5.0",
+    "sentence-transformers>=5.6.1",
 ]
