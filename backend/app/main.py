@@ -29,7 +29,7 @@ from api.contact import router as contact_router
 from api.journal import router as journal_router
 from api.health import router as health_router
 from api.chat import router as chat_router
-from core.adapters import ai_search, azure_openai, content_safety
+from core.adapters import azure_openai, content_safety, local_embeddings, pgvector_search
 from observability import configure_observability
 
 
@@ -38,12 +38,15 @@ async def lifespan(app: FastAPI):
     connector = aiohttp.TCPConnector(limit=20)
     app.state.github_session = aiohttp.ClientSession(connector=connector)
 
-    # Azure OpenAI + AI Search clients for /chat; None when chat isn't configured.
+    # Chat clients: Azure OpenAI (generation) + local embedder + pgvector pool
+    # (retrieval). All None when chat isn't configured.
     if settings.chat_configured:
         app.state.openai_client = azure_openai.create_client()
-        app.state.search_client = ai_search.create_client()
+        app.state.embed_client = local_embeddings.create_client()
+        app.state.search_client = await pgvector_search.create_client()
     else:
         app.state.openai_client = None
+        app.state.embed_client = None
         app.state.search_client = None
 
     # Content Safety is optional; None when not configured (other guardrails remain).
