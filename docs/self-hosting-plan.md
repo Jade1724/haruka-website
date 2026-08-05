@@ -3,11 +3,12 @@
 ## Context
 
 Azure AI Search is the expensive piece of the mecha-haruka RAG chatbot. This plan
-replaces it — and the rest of the paid hosting — with a self-hosted stack on an
-8GB Raspberry Pi 5: frontend, backend, and a local embedding model, all behind a
-single Cloudflare Tunnel. PostgreSQL + pgvector runs on Neon (free tier) instead
-of on the Pi, to leave RAM headroom on the 8GB board for the app processes and
-the embedding model. Azure OpenAI stays only for chat generation (a local LLM on
+replaces it with a self-hosted RAG stack on an 8GB Raspberry Pi 5 — the FastAPI
+backend and a local embedding model — reached from the Vercel-hosted site over an
+authenticated Cloudflare Tunnel. The marketing site, journal, and contact API stay
+on Vercel (free tier). PostgreSQL + pgvector runs in a Docker container on the Pi,
+colocated with the RAG service (Neon's free tier kept as a fallback if the 8GB
+board's RAM tightens). Azure OpenAI stays only for chat generation (a local LLM on
 an 8GB Pi is not practical; revisit later).
 
 This is deliberately a **learning project**. Each phase lists what you'll learn,
@@ -16,19 +17,23 @@ is **implementing HNSW from scratch** and eventually serving real queries with i
 
 ## Decisions
 
-1. **Hosting shape**: frontend + backend on the Pi behind one Cloudflare Tunnel.
-   Zero hosting cost for the app tier. Tradeoff: site availability depends on
-   home power/internet.
-2. **Database**: PostgreSQL + pgvector on Neon (free tier) rather than on the
-   Pi. An 8GB Pi has little headroom once you add the app processes and the
-   embedding model, and pgvector's HNSW index *builds* spike well above the
-   steady-state RSS in the table below — offloading Postgres removes that risk.
-   Neon runs real pgvector, so the Phase 1 learning goals (vector column type,
-   distance operators, HNSW index limits) are unaffected; the from-scratch HNSW
-   work in Phase 6 is pure Python/numpy and reads vectors out of Postgres
-   regardless of where it's hosted, so it's unaffected too. Tradeoff: hybrid
-   search queries round-trip over the internet instead of localhost, and the
-   free tier autosuspends idle compute and caps storage/compute-hours.
+1. **Hosting shape**: the site (frontend + journal/contact API) stays on Vercel;
+   the mecha-haruka RAG service (backend + embedder + pgvector, optional local LLM
+   later) runs on the Pi, reached over an authenticated Cloudflare Tunnel with
+   Vercel proxying `/chat` to it. Tradeoff: chat availability depends on home
+   power/internet, but the rest of the site stays up on Vercel if the Pi is down.
+2. **Database**: PostgreSQL + pgvector in a Docker container **on the Pi**,
+   colocated with the RAG service, with **Neon (free tier) kept as a fallback**
+   if RAM tightens. Running it on the Pi has sysadmin learning value and keeps
+   hybrid-search queries on localhost rather than round-tripping over the
+   internet. Watch the RAM: an 8GB Pi has limited headroom once the app processes
+   and the embedding model land, and pgvector's HNSW index *builds* spike well
+   above the steady-state RSS in the table below — if it gets tight, evict
+   Postgres to Neon (the `chunks` data is derived, so it's same DDL + a
+   `DATABASE_URL` swap + a re-run of the build). Either way the Phase 1 learning
+   goals (vector column type, distance operators, HNSW index limits) hold, and
+   the from-scratch HNSW work in Phase 6 is pure Python/numpy that reads vectors
+   out of Postgres regardless of where it's hosted.
 3. **Embeddings**: local `BAAI/bge-small-en-v1.5` (384 dims) via
    sentence-transformers, replacing `text-embedding-3-large` (3072 dims — which
    exceeds pgvector's 2000-dim HNSW index limit anyway). Full corpus re-embed
@@ -169,29 +174,64 @@ what is lost without it.
 - Rewire `main.py` app state + `factory.py`; update `config.py`
   (`database_url`, `chat_configured` no longer gates on Azure Search creds).
 
-**Checkpoint**: run backend locally against Neon; `/chat` answers with
-correct citations. Run the `llm/mecha_llm/eval/` RAGAS suite and compare
+**Checkpoint**: run backend locally against the Pi's Postgres over LAN; `/chat`
+answers with correct citations. Run the `llm/mecha_llm/eval/` RAGAS suite and compare
 retrieval metrics against the Azure baseline (record the baseline **before**
 tearing anything down).
 
-## Phase 5 — Apps onto the Pi + Cloudflare Tunnel
+## Phase 5 — RAG service on the Pi; site stays on Vercel
 
-**Goal**: the whole site served from the Pi, no open router ports.
+**Goal**: the mecha-haruka RAG pipeline (embed → retrieve → generate) runs on
+the Pi and is reachable from the Vercel-hosted site over an authenticated HTTPS
+tunnel. The marketing site, journal, and contact API stay on Vercel.
 
-**What you'll learn**: arm64 Docker builds, Next.js standalone output, DNS,
-zero-open-port ingress via tunnels, deploying without a PaaS.
+**Why this shape (revised from "whole site onto the Pi")**: the retrieval path
+needs the local embedding model (torch / sentence-transformers) and a live
+Postgres connection — neither belongs on Vercel serverless (cold starts, bundle
+size limits, no persistent DB connection to a home network). Since the embedder,
+pgvector, and (optionally, later) a local LLM all live on the Pi, the whole RAG
+service belongs there; Vercel just proxies `/chat` to it. Bonus: if the Pi or
+home ISP is down, the site stays up on Vercel and only chat degrades — clean
+failure isolation the all-on-Pi design didn't have.
 
-- Dockerfiles: Next.js (standalone) + FastAPI, built for arm64.
-- Compose stack: `frontend`, `backend`, `cloudflared` (no `postgres` service —
-  the backend reaches Neon over the internet via `DATABASE_URL`).
-- Cloudflare Tunnel: move the domain's DNS to Cloudflare, create a tunnel,
-  public hostnames for the site and API routed to the local containers.
-- Secrets via an env file on the Pi; restart policies; a simple `deploy.sh`
+**What you'll learn**: arm64 Docker builds, exposing a single home service via
+Cloudflare Tunnel (HTTP ingress, no open router ports), service-to-service auth
+(Cloudflare Access service token / shared bearer), and proxying a streaming SSE
+response through a serverless function.
+
+**Topology**:
+```
+Browser → Vercel (static site + journal/contact API)
+        → Vercel /chat proxy ── HTTPS (Cloudflare Tunnel) ──▶ Pi FastAPI RAG service
+                                                              (embed → hybrid_search → generate → stream)
+```
+
+- **Pi side**: Dockerfile for the FastAPI backend (arm64) — the Phase 4 code
+  unchanged, just running here. Compose stack: `backend`, `cloudflared`, and the
+  existing `postgres` (pgvector) container; `DATABASE_URL` points at the local
+  container over the compose network (Neon remains the fallback). No `frontend`
+  container — the site stays on Vercel.
+- **Cloudflare Tunnel**: one public hostname (e.g. `api.<domain>`) routed to the
+  local backend container. HTTP only — raw Postgres is never exposed.
+- **Auth**: the Pi's `/chat` requires a shared secret (bearer token) or a
+  Cloudflare Access service token that only the Vercel proxy holds; otherwise the
+  endpoint is an open LLM/DB on the public internet.
+- **Vercel side**: a thin `/chat` route that forwards the request to the Pi
+  hostname with the auth token and streams the SSE response back to the browser
+  (one origin for the client, a place to inject auth, optional Azure-generation
+  fallback when the Pi is unreachable). Everything non-chat stays on Vercel
+  untouched; the frontend `NEXT_PUBLIC_CHAT_ENABLED` gate is unchanged.
+- **Secrets** via an env file on the Pi; restart policies; a simple `deploy.sh`
   (git pull → build → `docker compose up -d`).
 
-**Checkpoint**: the site loads over the public domain with the tunnel as the
-only ingress; chat works end-to-end; pulling the Pi's Ethernet and restoring it
-recovers without intervention.
+**DNS**: the site's DNS stays on Vercel. Only a single `api.` subdomain routes
+through Cloudflare to the Pi — no domain-wide cutover here.
+
+**Checkpoint**: with `NEXT_PUBLIC_CHAT_ENABLED=true`, chat works end-to-end from
+the production Vercel site, streaming tokens sourced from the Pi; a direct call
+to the Pi `/chat` without the auth token is rejected; pulling the Pi's Ethernet
+drops chat while the rest of the site keeps serving on Vercel, and restoring it
+recovers chat without intervention.
 
 ## Phase 6 — HNSW from scratch (the centerpiece)
 
@@ -227,8 +267,8 @@ exact search, and the eval suite shows no quality regression vs pgvector.
 
 **Goal**: stop paying.
 
-- Repoint DNS from Vercel to the tunnel (done in Phase 5); pause/remove the
-  Vercel projects once stable.
+- Keep the Vercel-hosted site; no domain-wide DNS cutover (only the `api.`
+  subdomain routes to the Pi, set up in Phase 5). The Vercel project stays.
 - Re-run the eval suite one final time against production; archive results
   next to the Azure-baseline run.
 - Decommission Azure AI Search; remove Azure OpenAI *embedding* deployment
@@ -247,7 +287,7 @@ exact search, and the eval suite shows no quality regression vs pgvector.
 | Embeddings           | per-token (small)         | $0 (local)                |
 | Chat generation      | per-token                 | per-token (unchanged)     |
 | Hosting (app tier)   | Vercel free tier          | $0 + Pi power (~2–5 W)    |
-| Database             | —                         | $0 (Neon free tier)       |
+| Database             | —                         | $0 (pgvector on the Pi)   |
 | Cloudflare Tunnel    | —                         | $0 (free plan)            |
 
 ## Suggested order of work
