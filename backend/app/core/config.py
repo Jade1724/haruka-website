@@ -48,6 +48,12 @@ class Settings(BaseSettings):
     database_url: str = ""
     rag_top_k: int = 5
 
+    # --- RAG topology (hybrid: proxy on Vercel, local on the Pi) ---
+    # "local": serve RAG in-process (Pi). "proxy": forward /chat upstream (Vercel).
+    rag_mode: str = "local"
+    rag_upstream_url: str = ""  # proxy mode: the Pi's public /chat URL (tunnel)
+    rag_proxy_token: str = ""  # shared bearer; proxy sends it, local verifies it
+
     # --- Azure AI Content Safety (Prompt Shields + harmful-content checks) ---
     azure_content_safety_endpoint: str = ""
     azure_content_safety_key: str = ""

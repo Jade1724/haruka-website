@@ -29,7 +29,6 @@ from api.contact import router as contact_router
 from api.journal import router as journal_router
 from api.health import router as health_router
 from api.chat import router as chat_router
-from core.adapters import azure_openai, content_safety, local_embeddings, pgvector_search
 from observability import configure_observability
 
 
@@ -38,26 +37,31 @@ async def lifespan(app: FastAPI):
     connector = aiohttp.TCPConnector(limit=20)
     app.state.github_session = aiohttp.ClientSession(connector=connector)
 
-    # Chat clients: Azure OpenAI (generation) + local embedder + pgvector pool
-    # (retrieval). All None when chat isn't configured.
-    if settings.chat_configured:
+    # RAG clients are created only in "local" mode (the Pi). In "proxy" mode
+    # (Vercel) /chat just forwards upstream, so the heavy RAG deps are never
+    # imported — keeping the Vercel deployment on the base dependencies.
+    app.state.openai_client = None
+    app.state.embed_client = None
+    app.state.search_client = None
+    app.state.content_safety_client = None
+
+    if settings.rag_mode == "local" and settings.chat_configured:
+        # Lazy imports: pull the `rag` extra (openai, torch, asyncpg) here only.
+        from core.adapters import azure_openai, local_embeddings, pgvector_search
+
         app.state.openai_client = azure_openai.create_client()
         app.state.embed_client = local_embeddings.create_client()
         app.state.search_client = await pgvector_search.create_client()
-    else:
-        app.state.openai_client = None
-        app.state.embed_client = None
-        app.state.search_client = None
 
-    # Content Safety is optional; None when not configured (other guardrails remain).
-    if settings.safety_configured:
-        app.state.content_safety_client = content_safety.ContentSafetyClient()
-        logging.getLogger("app.main").info("Content Safety: ENABLED")
-    else:
-        app.state.content_safety_client = None
-        logging.getLogger("app.main").warning(
-            "Content Safety: DISABLED (set AZURE_CONTENT_SAFETY_ENDPOINT + _KEY, then restart)"
-        )
+        if settings.safety_configured:
+            from core.adapters import content_safety
+
+            app.state.content_safety_client = content_safety.ContentSafetyClient()
+            logging.getLogger("app.main").info("Content Safety: ENABLED")
+        else:
+            logging.getLogger("app.main").warning(
+                "Content Safety: DISABLED (set AZURE_CONTENT_SAFETY_ENDPOINT + _KEY, then restart)"
+            )
 
     yield
 
