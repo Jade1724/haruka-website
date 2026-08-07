@@ -9,7 +9,7 @@ WORKDIR /app
 
 COPY pyproject.toml uv.lock README.md ./
 
-RUN uv sync --frozen --no-dev --no-install-project
+RUN uv sync --frozen --no-dev --extra rag --no-install-project
 
 # Runtime stage
 FROM python:3.13-slim-bookworm AS runner
