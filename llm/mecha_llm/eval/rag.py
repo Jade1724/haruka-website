@@ -113,6 +113,14 @@ async def _generate(question: str, contexts: list[str]) -> str:
     return (resp.choices[0].message.content or "").strip()
 
 
+async def _answer_with_vector(
+    question: str, vector: list[float], top_k: int
+) -> RagResult:
+    contexts = await _retrieve(question, vector, top_k)
+    text = await _generate(question, contexts)
+    return RagResult(question=question, answer=text, contexts=contexts)
+
+
 async def answer(question: str, *, top_k: int = DEFAULT_TOP_K) -> RagResult:
     settings.require(
         "azure_openai_endpoint",
@@ -120,18 +128,27 @@ async def answer(question: str, *, top_k: int = DEFAULT_TOP_K) -> RagResult:
         "database_url",
     )
     vector = (await embed_texts([question], is_query=True))[0]
-    contexts = await _retrieve(question, vector, top_k)
-    text = await _generate(question, contexts)
-    return RagResult(question=question, answer=text, contexts=contexts)
+    return await _answer_with_vector(question, vector, top_k)
 
 
 async def answer_all(
     questions: list[str], *, top_k: int = DEFAULT_TOP_K, concurrency: int = 4
 ) -> list[RagResult]:
+    settings.require(
+        "azure_openai_endpoint",
+        "azure_openai_api_key",
+        "database_url",
+    )
+    # Embed all queries in one batch up front: loads the model once and never
+    # runs encode() from multiple worker threads (concurrent mps inference can
+    # crash natively). Retrieval + generation below stay concurrent (I/O bound).
+    vectors = await embed_texts(questions, is_query=True)
     sem = asyncio.Semaphore(concurrency)
 
-    async def one(q: str) -> RagResult:
+    async def one(q: str, vec: list[float]) -> RagResult:
         async with sem:
-            return await answer(q, top_k=top_k)
+            return await _answer_with_vector(q, vec, top_k)
 
-    return await asyncio.gather(*(one(q) for q in questions))
+    return await asyncio.gather(
+        *(one(q, v) for q, v in zip(questions, vectors))
+    )
