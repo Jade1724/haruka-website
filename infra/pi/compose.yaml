@@ -18,5 +18,34 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+
+  backend:
+    build: ../../backend
+    restart: unless-stopped
+    # Pi-side secrets: AZURE_OPENAI_*, RAG_PROXY_TOKEN, CHAT_ENABLED, etc.
+    env_file:
+      - ./backend.env
+    environment:
+      RAG_MODE: local
+      # Reach Postgres over the compose network, not the LAN.
+      DATABASE_URL: postgresql://mechaharuka:${POSTGRES_PASSWORD}@postgres:5432/mechaharuka
+    depends_on:
+      postgres:
+        condition: service_healthy
+    # No published ports: reachable only via the cloudflared tunnel below.
+    expose:
+      - "8000"
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    # Remotely-managed tunnel: ingress (api.<domain> -> http://backend:8000)
+    # is configured in the Cloudflare Zero Trust dashboard for this token.
+    command: tunnel --no-autoupdate run
+    environment:
+      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN}
+    depends_on:
+      - backend
+
 volumes:
   pgdata:
