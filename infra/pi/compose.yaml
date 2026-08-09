@@ -1,0 +1,56 @@
+name: mechaharuka
+services:
+  postgres:
+    image: pgvector/pgvector:0.8.5-pg18-trixie
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: mechaharuka
+      POSTGRES_DB: mechaharuka
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    command: postgres -c shared_buffers=256MB -c maintenance_work_mem=256MB
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql
+    mem_limit: 1g
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mechaharuka -d mechaharuka"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build: ../../backend
+    restart: unless-stopped
+    # Pi-side secrets: AZURE_OPENAI_*, RAG_PROXY_TOKEN, CHAT_ENABLED, etc.
+    env_file:
+      - ./backend.env
+    environment:
+      RAG_MODE: local
+      # Reach Postgres over the compose network, not the LAN.
+      DATABASE_URL: postgresql://mechaharuka:${POSTGRES_PASSWORD}@postgres:5432/mechaharuka
+    depends_on:
+      postgres:
+        condition: service_healthy
+    # Persist the downloaded bge model across restarts (owned by the app user
+    # via the image's HF_HOME dir, so the fresh volume inherits write access).
+    volumes:
+      - hf_cache:/home/app/.cache/huggingface
+    # No published ports: reachable only via the cloudflared tunnel below.
+    expose:
+      - "8000"
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    # Remotely-managed tunnel: ingress (api.<domain> -> http://backend:8000)
+    # is configured in the Cloudflare Zero Trust dashboard for this token.
+    command: tunnel --no-autoupdate run
+    environment:
+      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN}
+    depends_on:
+      - backend
+
+volumes:
+  pgdata:
+  hf_cache:

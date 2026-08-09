@@ -1,6 +1,15 @@
-{
-  "faithfulness": 0.7962962962962963,
-  "answer_relevancy": 0.5897585035357773,
-  "llm_context_precision_with_reference": 0.5740740740212963,
-  "context_recall": 0.5555555555555556
-}
+[
+  {
+    "faithfulness": 0.7962962962962963,
+    "answer_relevancy": 0.5897585035357773,
+    "llm_context_precision_with_reference": 0.5740740740212963,
+    "context_recall": 0.5555555555555556
+  },
+  {
+    "run_datetime": "2026-08-07T09:16:59.929994+00:00",
+    "faithfulness": 0.8796296296296295,
+    "answer_relevancy": 0.6024109515414291,
+    "llm_context_precision_with_reference": 0.5185185184740742,
+    "context_recall": 0.6666666666666666
+  }
+]

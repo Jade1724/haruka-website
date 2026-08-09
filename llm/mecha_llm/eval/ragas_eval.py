@@ -1,9 +1,10 @@
 """RAGAS evaluation over the golden set, gated on thresholds.
 
 Metrics: faithfulness, answer relevancy, context precision, context recall.
-Judge LLM + embeddings are Azure OpenAI. Prints a per-metric report, writes
-``eval_results.json``, and exits non-zero if any metric is below threshold (so
-it works as a CI quality gate).
+Judge LLM + embeddings are Azure OpenAI. Prints a per-metric report, appends the
+run (tagged with ``run_datetime``) to the ``eval_results.json`` history array,
+and exits non-zero if any metric is below threshold (so it works as a CI quality
+gate).
 
 Run:  uv run python -m mecha_llm.eval.ragas_eval
 """
@@ -14,6 +15,8 @@ import asyncio
 import json
 import logging
 import sys
+from datetime import datetime, timezone
+from pathlib import Path
 
 from ragas import EvaluationDataset, evaluate
 from ragas.metrics import (
@@ -37,6 +40,26 @@ THRESHOLDS = {
     "context_recall": 0.60,
 }
 DEFAULT_THRESHOLD = 0.60
+
+RESULTS_PATH = Path("eval_results.json")
+
+
+def _append_result(entry: dict) -> int:
+    """Append one run to the results file (a JSON array), returning the new
+    count. A legacy single-run object is migrated to the first array element."""
+    history: list = []
+    if RESULTS_PATH.exists():
+        try:
+            existing = json.loads(RESULTS_PATH.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            existing = None
+        if isinstance(existing, list):
+            history = existing
+        elif isinstance(existing, dict):
+            history = [existing]
+    history.append(entry)
+    RESULTS_PATH.write_text(json.dumps(history, indent=2), encoding="utf-8")
+    return len(history)
 
 
 def _build_dataset(results, golden) -> EvaluationDataset:
@@ -82,9 +105,9 @@ def main() -> None:
         if not ok:
             failed.append(name)
 
-    with open("eval_results.json", "w", encoding="utf-8") as fh:
-        json.dump(summary, fh, indent=2)
-    logger.info("Wrote eval_results.json")
+    entry = {"run_datetime": datetime.now(timezone.utc).isoformat(), **summary}
+    total = _append_result(entry)
+    logger.info("Appended run to %s (%d runs recorded)", RESULTS_PATH, total)
 
     if failed:
         print(f"\n❌ Below threshold: {', '.join(failed)}")

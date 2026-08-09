@@ -13,9 +13,15 @@ def get_journal_service(request: Request) -> JournalService:
 def get_rag_service(request: Request) -> RagService:
     openai_client = request.app.state.openai_client
     search_client = request.app.state.search_client
-    if openai_client is None or search_client is None:
+    embed_client = request.app.state.embed_client
+    if openai_client is None or search_client is None or embed_client is None:
         raise HTTPException(
             status_code=503, detail="Chat is not configured on this deployment."
         )
     # Content Safety is optional; None when not configured.
-    return RagService(openai_client, search_client, request.app.state.content_safety_client)
+    return RagService(
+        openai_client,
+        search_client,
+        embed_client,
+        request.app.state.content_safety_client,
+    )

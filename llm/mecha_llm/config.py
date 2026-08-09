@@ -26,7 +26,14 @@ class Settings(BaseSettings):
     azure_openai_api_version: str = "2024-10-21"
     azure_openai_embedding_deployment: str = "text-embedding-3-large"
     azure_openai_chat_deployment: str = "gpt-4o"
-    embedding_dimensions: int = 3072
+    embedding_dimensions: int = 384
+
+    # --- Local embeddings (sentence-transformers) ---
+    embedding_provider: str = "local"   # "local" | "azure"
+    local_embedding_model: str = "BAAI/bge-small-en-v1.5"
+    local_embedding_query_prefix: str = (
+        "Represent this sentence for searching relevant passages: "
+    )
 
     # --- Azure AI Search ---
     azure_search_endpoint: str = ""
@@ -40,6 +47,9 @@ class Settings(BaseSettings):
     # --- Observability (OpenTelemetry -> Azure Monitor / Application Insights) ---
     applicationinsights_connection_string: str = ""
     otel_service_name: str = "mecha-haruka"
+
+    # --- Self-hosting pgvector config ---
+    database_url: str = ""
 
     def require(self, *fields: str) -> None:
         """Raise if any named setting is empty — call before a stage that needs it."""

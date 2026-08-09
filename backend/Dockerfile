@@ -9,13 +9,15 @@ WORKDIR /app
 
 COPY pyproject.toml uv.lock README.md ./
 
-RUN uv sync --frozen --no-dev --no-install-project
+RUN uv sync --frozen --no-dev --extra rag --no-install-project
 
 # Runtime stage
 FROM python:3.13-slim-bookworm AS runner
 
 RUN groupadd --system --gid 1001 app \
-	&& useradd --system --uid 1001 --gid 1001 app
+	&& useradd --system --uid 1001 --gid 1001 app \
+	&& mkdir -p /home/app/.cache/huggingface \
+	&& chown -R app:app /home/app
 
 WORKDIR /app
 
@@ -24,7 +26,8 @@ COPY --chown=app:app app ./app
 
 ENV PATH="/app/.venv/bin:$PATH" \
 	PYTHONUNBUFFERED=1 \
-	PYTHONDONTWRITEBYTECODE=1
+	PYTHONDONTWRITEBYTECODE=1 \
+	HF_HOME=/home/app/.cache/huggingface
 
 USER app
 

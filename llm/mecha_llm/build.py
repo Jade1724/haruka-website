@@ -20,8 +20,8 @@ import logging
 from .chunking import chunk_documents
 from .config import settings
 from .documents import SourceDoc
-from .embeddings import embed_chunks
-from .index import ensure_index, upsert_chunks
+from .embeddings_provider import embed_chunks
+from .pg_store import ensure_schema, upsert_chunks
 from .sources.content_json import load_content_docs
 from .sources.journals import fetch_journal_docs
 from .sources.routes import route_docs
@@ -67,11 +67,11 @@ async def build(*, dry_run: bool = False, skip_journals: bool = False) -> None:
     embedded = await embed_chunks(chunks)
     logger.info("Embedded %d chunks (%d dims).", len(embedded), settings.embedding_dimensions)
 
-    await ensure_index()
-    logger.info("Ensured index %r is up to date.", settings.azure_search_index)
+    await ensure_schema()
+    logger.info("Ensured pgvector schema is up to date.")
 
     uploaded = await upsert_chunks(embedded)
-    logger.info("Upserted %d/%d chunks into Azure AI Search.", uploaded, len(embedded))
+    logger.info("Upserted %d/%d chunks into Postgres/pgvector.", uploaded, len(embedded))
 
 
 def main() -> None:

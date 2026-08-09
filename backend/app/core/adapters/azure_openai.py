@@ -1,9 +1,9 @@
-"""Thin async wrapper around Azure OpenAI: query embeddings + streaming chat.
+"""Thin async wrapper around Azure OpenAI: streaming chat generation.
 
 Mirrors the simplicity of ``email.py`` — module-level functions over a client
 that ``main.py`` creates once (in the lifespan) and shares via ``app.state``.
-The embedding width is pinned to ``embedding_dimensions`` so query vectors match
-the Azure AI Search index built by the offline ``llm/`` pipeline.
+Query embeddings moved to ``local_embeddings`` (bge, on-device); this module now
+only handles chat generation.
 """
 
 import logging
@@ -22,15 +22,6 @@ def create_client() -> AsyncAzureOpenAI:
         api_key=settings.azure_openai_api_key,
         api_version=settings.azure_openai_api_version,
     )
-
-
-async def embed_query(client: AsyncAzureOpenAI, text: str) -> list[float]:
-    resp = await client.embeddings.create(
-        model=settings.azure_openai_embedding_deployment,
-        input=[text],
-        dimensions=settings.embedding_dimensions,
-    )
-    return resp.data[0].embedding
 
 
 async def stream_chat(

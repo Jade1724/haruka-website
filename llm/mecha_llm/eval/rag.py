@@ -11,16 +11,16 @@ from __future__ import annotations
 import asyncio
 from dataclasses import dataclass
 
-from azure.core.credentials import AzureKeyCredential
-from azure.search.documents.aio import SearchClient
-from azure.search.documents.models import VectorizedQuery
+import asyncpg
 from openai import AsyncAzureOpenAI
+from pgvector.asyncpg import register_vector
 
 from ..config import settings
-from ..embeddings import embed_texts
+from ..embeddings_local import embed_texts
 
-SEMANTIC_CONFIG = "default-semantic"
-VECTOR_FIELD = "embedding"
+# RRF fusion constants; mirror backend/app/core/adapters/pgvector_search.py.
+RRF_K = 60
+CANDIDATES = 50
 DEFAULT_TOP_K = 5
 
 # Mirror of backend/app/services/rag_service.py SYSTEM_PROMPT.
@@ -47,26 +47,48 @@ class RagResult:
     contexts: list[str]
 
 
+# Hybrid retrieval mirroring the backend's pgvector_search adapter: vector
+# (cosine) + Postgres FTS fused with Reciprocal Rank Fusion.
+_HYBRID_SQL = """
+WITH vector_search AS (
+    SELECT id, row_number() OVER (ORDER BY embedding <=> $1) AS rank
+    FROM chunks
+    ORDER BY embedding <=> $1
+    LIMIT $3
+),
+keyword_search AS (
+    SELECT id, row_number() OVER (ORDER BY ts_rank_cd(content_tsv, query) DESC) AS rank
+    FROM chunks, websearch_to_tsquery('english', $2) query
+    WHERE content_tsv @@ query
+    ORDER BY ts_rank_cd(content_tsv, query) DESC
+    LIMIT $3
+),
+fused AS (
+    SELECT
+        id,
+        COALESCE(1.0 / ($4 + v.rank), 0.0)
+        + COALESCE(1.0 / ($4 + k.rank), 0.0) AS score
+    FROM vector_search v
+    FULL OUTER JOIN keyword_search k USING (id)
+)
+SELECT c.content
+FROM fused f
+JOIN chunks c USING (id)
+ORDER BY f.score DESC
+LIMIT $5;
+"""
+
+
 async def _retrieve(question: str, vector: list[float], top_k: int) -> list[str]:
-    client = SearchClient(
-        endpoint=settings.azure_search_endpoint,
-        index_name=settings.azure_search_index,
-        credential=AzureKeyCredential(settings.azure_search_api_key),
-    )
-    async with client:
-        results = await client.search(
-            search_text=question,
-            vector_queries=[
-                VectorizedQuery(
-                    vector=vector, k_nearest_neighbors=top_k, fields=VECTOR_FIELD
-                )
-            ],
-            query_type="semantic",
-            semantic_configuration_name=SEMANTIC_CONFIG,
-            top=top_k,
-            select=["content", "title", "url"],
+    conn = await asyncpg.connect(settings.database_url)
+    await register_vector(conn)
+    try:
+        rows = await conn.fetch(
+            _HYBRID_SQL, vector, question, CANDIDATES, RRF_K, top_k
         )
-        return [doc["content"] async for doc in results]
+    finally:
+        await conn.close()
+    return [r["content"] for r in rows]
 
 
 async def _generate(question: str, contexts: list[str]) -> str:
@@ -91,26 +113,42 @@ async def _generate(question: str, contexts: list[str]) -> str:
     return (resp.choices[0].message.content or "").strip()
 
 
-async def answer(question: str, *, top_k: int = DEFAULT_TOP_K) -> RagResult:
-    settings.require(
-        "azure_openai_endpoint",
-        "azure_openai_api_key",
-        "azure_search_endpoint",
-        "azure_search_api_key",
-    )
-    vector = (await embed_texts([question]))[0]
+async def _answer_with_vector(
+    question: str, vector: list[float], top_k: int
+) -> RagResult:
     contexts = await _retrieve(question, vector, top_k)
     text = await _generate(question, contexts)
     return RagResult(question=question, answer=text, contexts=contexts)
 
 
+async def answer(question: str, *, top_k: int = DEFAULT_TOP_K) -> RagResult:
+    settings.require(
+        "azure_openai_endpoint",
+        "azure_openai_api_key",
+        "database_url",
+    )
+    vector = (await embed_texts([question], is_query=True))[0]
+    return await _answer_with_vector(question, vector, top_k)
+
+
 async def answer_all(
     questions: list[str], *, top_k: int = DEFAULT_TOP_K, concurrency: int = 4
 ) -> list[RagResult]:
+    settings.require(
+        "azure_openai_endpoint",
+        "azure_openai_api_key",
+        "database_url",
+    )
+    # Embed all queries in one batch up front: loads the model once and never
+    # runs encode() from multiple worker threads (concurrent mps inference can
+    # crash natively). Retrieval + generation below stay concurrent (I/O bound).
+    vectors = await embed_texts(questions, is_query=True)
     sem = asyncio.Semaphore(concurrency)
 
-    async def one(q: str) -> RagResult:
+    async def one(q: str, vec: list[float]) -> RagResult:
         async with sem:
-            return await answer(q, top_k=top_k)
+            return await _answer_with_vector(q, vec, top_k)
 
-    return await asyncio.gather(*(one(q) for q in questions))
+    return await asyncio.gather(
+        *(one(q, v) for q, v in zip(questions, vectors))
+    )

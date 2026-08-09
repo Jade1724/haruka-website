@@ -31,19 +31,28 @@ class Settings(BaseSettings):
     # are present.
     chat_enabled: bool = False
 
-    # --- Azure OpenAI (chat + embeddings) ---
+    # --- Azure OpenAI (chat generation only; embeddings are local now) ---
     azure_openai_endpoint: str = ""
     azure_openai_api_key: str = ""
     azure_openai_api_version: str = "2024-10-21"
     azure_openai_chat_deployment: str = "gpt-4o"
-    azure_openai_embedding_deployment: str = "text-embedding-3-large"
-    embedding_dimensions: int = 3072
 
-    # --- Azure AI Search (retrieval) ---
-    azure_search_endpoint: str = ""
-    azure_search_api_key: str = ""
-    azure_search_index: str = "mecha-haruka"
+    # --- Local embeddings (sentence-transformers, replaces Azure OpenAI) ---
+    local_embedding_model: str = "BAAI/bge-small-en-v1.5"
+    local_embedding_query_prefix: str = (
+        "Represent this sentence for searching relevant passages: "
+    )
+    embedding_dimensions: int = 384
+
+    # --- pgvector retrieval (Postgres on the Pi; replaces Azure AI Search) ---
+    database_url: str = ""
     rag_top_k: int = 5
+
+    # --- RAG topology (hybrid: proxy on Vercel, local on the Pi) ---
+    # "local": serve RAG in-process (Pi). "proxy": forward /chat upstream (Vercel).
+    rag_mode: str = "local"
+    rag_upstream_url: str = ""  # proxy mode: the Pi's public /chat URL (tunnel)
+    rag_proxy_token: str = ""  # shared bearer; proxy sends it, local verifies it
 
     # --- Azure AI Content Safety (Prompt Shields + harmful-content checks) ---
     azure_content_safety_endpoint: str = ""
@@ -56,13 +65,13 @@ class Settings(BaseSettings):
 
     @property
     def chat_configured(self) -> bool:
-        """True when chat is explicitly enabled and its Azure settings exist."""
+        """True when chat is enabled, Azure OpenAI (generation) is set, and the
+        pgvector store (retrieval) is reachable."""
         return bool(
             self.chat_enabled
             and self.azure_openai_endpoint
             and self.azure_openai_api_key
-            and self.azure_search_endpoint
-            and self.azure_search_api_key
+            and self.database_url
         )
 
     @property

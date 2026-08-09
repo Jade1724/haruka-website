@@ -8,12 +8,12 @@ are a Phase 7 addition and slot in at the marked hook before retrieval.
 import logging
 from collections.abc import AsyncIterator
 
+import asyncpg
 from openai import AsyncAzureOpenAI
 from opentelemetry import trace
+from sentence_transformers import SentenceTransformer
 
-from azure.search.documents.aio import SearchClient
-
-from core.adapters import ai_search, azure_openai
+from core.adapters import azure_openai, local_embeddings, pgvector_search
 from core.adapters.content_safety import ContentSafetyClient
 from core.config import settings
 from models.chat import ChatRequest, Citation
@@ -49,11 +49,13 @@ class RagService:
     def __init__(
         self,
         openai_client: AsyncAzureOpenAI,
-        search_client: SearchClient,
+        search_pool: asyncpg.Pool,
+        embed_client: SentenceTransformer,
         safety_client: ContentSafetyClient | None = None,
     ) -> None:
         self._openai = openai_client
-        self._search = search_client
+        self._search = search_pool
+        self._embed = embed_client
         self._safety = safety_client
 
     async def stream_answer(self, req: ChatRequest) -> AsyncIterator[dict]:
@@ -80,8 +82,8 @@ class RagService:
                     return
 
             with tracer.start_as_current_span("rag.retrieve") as retrieve_span:
-                query_vector = await azure_openai.embed_query(self._openai, req.message)
-                chunks = await ai_search.hybrid_search(
+                query_vector = await local_embeddings.embed_query(self._embed, req.message)
+                chunks = await pgvector_search.hybrid_search(
                     self._search,
                     query_text=req.message,
                     query_vector=query_vector,
