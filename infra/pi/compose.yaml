@@ -32,6 +32,10 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+    # Persist the downloaded bge model across restarts (owned by the app user
+    # via the image's HF_HOME dir, so the fresh volume inherits write access).
+    volumes:
+      - hf_cache:/home/app/.cache/huggingface
     # No published ports: reachable only via the cloudflared tunnel below.
     expose:
       - "8000"
@@ -49,3 +53,4 @@ services:
 
 volumes:
   pgdata:
+  hf_cache:
