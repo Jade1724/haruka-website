@@ -22,4 +22,18 @@ rag = [
     "asyncpg>=0.31.0",
     "pgvector>=0.5.0",
     "sentence-transformers>=5.6.1",
+    # Direct dep so the CPU-index source below is honored (it's otherwise a
+    # transitive dep of sentence-transformers, which uv sources don't reach).
+    "torch>=2.2",
 ]
+
+# The Pi has no GPU: pull torch from PyTorch's CPU wheel index on Linux so the
+# multi-GB nvidia-cuda-* dependency tree is never installed. macOS keeps the
+# default PyPI wheel (MPS) for local dev.
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[tool.uv.sources]
+torch = [{ index = "pytorch-cpu", marker = "sys_platform == 'linux'" }]
