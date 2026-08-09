@@ -1,8 +1,12 @@
+from typing import TYPE_CHECKING
+
 from fastapi import HTTPException, Request
 
 from dao.github_dao import GithubDAO
 from services.journal_service import JournalService
-from services.rag_service import RagService
+
+if TYPE_CHECKING:
+    from services.rag_service import RagService
 
 
 def get_journal_service(request: Request) -> JournalService:
@@ -10,7 +14,11 @@ def get_journal_service(request: Request) -> JournalService:
     return JournalService(dao)
 
 
-def get_rag_service(request: Request) -> RagService:
+def get_rag_service(request: Request) -> "RagService":
+    # Lazy import: pulls the heavy RAG deps (asyncpg, torch, ...) which are only
+    # installed in "local" mode on the Pi, never on the Vercel proxy deployment.
+    from services.rag_service import RagService
+
     openai_client = request.app.state.openai_client
     search_client = request.app.state.search_client
     embed_client = request.app.state.embed_client
