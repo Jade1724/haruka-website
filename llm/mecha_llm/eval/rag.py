@@ -100,6 +100,12 @@ async def _generate(question: str, contexts: list[str]) -> str:
         api_key=settings.azure_openai_api_key,
         api_version=settings.azure_openai_api_version,
     )
+    # Keep in lockstep with backend/app/core/adapters/azure_openai.py — this is
+    # the same generation call, non-streamed, so the eval measures production.
+    params: dict = {}
+    if settings.chat_temperature is not None:
+        params["temperature"] = settings.chat_temperature
+
     async with client:
         resp = await client.chat.completions.create(
             model=settings.azure_openai_chat_deployment,
@@ -108,7 +114,7 @@ async def _generate(question: str, contexts: list[str]) -> str:
                 {"role": "system", "content": f"Context:\n{block}"},
                 {"role": "user", "content": question},
             ],
-            temperature=0.3,
+            **params,
         )
     return (resp.choices[0].message.content or "").strip()
 

@@ -31,11 +31,17 @@ class Settings(BaseSettings):
     # are present.
     chat_enabled: bool = False
 
-    # --- Azure OpenAI (chat generation only; embeddings are local now) ---
+    # --- Azure AI Foundry (chat generation only; embeddings are local now) ---
+    # The deployment name is the only thing that picks the model, so swapping
+    # models is an env change. Set it explicitly everywhere the backend runs —
+    # falling back to this default silently is how the Pi ended up on gpt-4o.
     azure_openai_endpoint: str = ""
     azure_openai_api_key: str = ""
     azure_openai_api_version: str = "2024-10-21"
-    azure_openai_chat_deployment: str = "gpt-4o"
+    azure_openai_chat_deployment: str = "DeepSeek-V4-Flash"
+    # Not every Foundry model accepts `temperature` (reasoning models reject it).
+    # Set to null/empty to omit the parameter from the request entirely.
+    chat_temperature: float | None = 0.3
 
     # --- Local embeddings (sentence-transformers, replaces Azure OpenAI) ---
     local_embedding_model: str = "BAAI/bge-small-en-v1.5"
